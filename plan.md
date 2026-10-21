@@ -1,69 +1,122 @@
-# GaggiMate Flow Profiling & Closed-Loop Control — Master Plan (`plan.md`)
+# GaggiMate Pro Custom Firmware Master Architecture & Implementation Plan (`plan.md`)
 
-> **Architecture:** Requirements-Driven Development (RDD)  
+> **Architecture:** Requirements-Driven Development (RDD) with Pure C++20 Decoupled Domain Models  
 > **Source Base:** Fork of `jniebuhr/gaggimate` (`https://github.com/rholligan/gaggimate`)  
-> **Initial Specification:** `docs/espresso_controller_comparison_gaggimate_spec.md`  
-> **Target Hardware:** ESP32, 0–5V pressure transducer, AC phase-angle dimmer, Ulka vibratory pump (50Hz mains), 3-way solenoid valve, BLE scales (Bookoo, Decent, Acaia, WeighMyBru) or HX711 wired load cells.
+> **Specifications:**  
+> 1. `docs/espresso_controller_comparison_gaggimate_spec.md` (Initial baseline)  
+> 2. `docs/revised_gaggimate_pro_engineering_firmware_specification.md` (Revised engineering & physics specification)  
+> **Target Hardware:** Gaggia Classic Pro (`RI9480/14`), GaggiMate Pro Kit (ESP32-S3 internal controller PCB + LilyGo T-RGB 2.1" 480×480 magnetic remote display), 0–5V pressure transducer, AC phase-angle dimmer, Ulka vibratory pump (50Hz mains), 3-way solenoid valve, BLE scales / HX711 load cells.
 
 ---
 
-## 1. Requirements Backlog
+## 1. Architectural Strategy: Isolated Pure C++20 Core
 
-### R1. Automated Pump Characteristic Calibration Wizard
-* **R1.1 Open Flow Sweep ($Q_{\text{max}} = f(\text{Duty})$):** Automated wizard routine stepping the pump through duty cycles (20%, 40%, 60%, 80%, 100%) for 5s intervals into a catch cup on a paired BLE scale to establish open-circuit flow rate $dm/dt$.
-* **R1.2 Blind Basket Stall Sweep ($P_{\text{stall}} = f(\text{Duty})$):** Automated blind basket sweep recording stabilized pressure on the 0–5V transducer for each duty level ($Q = 0$).
-* **R1.3 Surface Fit & Persistence:** Fit linear/polynomial pump displacement model $Q(P, \text{Duty}) = Q_{\text{max}}(\text{Duty}) \cdot \left(1 - \frac{P}{P_{\text{stall}}(\text{Duty})}\right)$ and persist coefficients / 2D LUT into ESP32 NVS, exposed via Web UI.
-
-### R2. Real-Time Flow Estimation & Closed-Loop Profiling
-* **R2.1 Real-Time Puck Flow Estimator:** Evaluate instantaneous pump output $Q_{\text{pump}}(P, \text{Duty})$ and subtract hydraulic compliance volume rate ($C \cdot \frac{dP}{dt}$) inside the controller loop to estimate water through the puck ($Q_{\text{puck}}$).
-* **R2.2 Closed-Loop Flow Controller (PID / Feedback):** Replace/augment current open-loop feedforward duty calculation with an active feedback loop (PI/PID) targeting setpoint flow rate (ml/s), dynamic flow tapering, and pressure ceilings.
-* **R2.3 Volumetric Integration:** Continuous accumulation of $\int Q_{\text{puck}} \, dt$ to provide virtual scale yield tracking when external hardware scales are disconnected.
-
-### R3. Event-Driven Conditional Recipe State Machine
-* **R3.1 Multi-Variable Transition Logic:** Enable compound exit conditions (`AND` / `OR`) across pressure, estimated/measured flow rate, gravimetric mass, volumetric yield, and timeout duration.
-* **R3.2 Predictive Gravimetric Auto-Stop:** Model scale mass momentum $\frac{dm}{dt}$ and valve latency to cut pump power and 3-way solenoid ahead of time, hitting beverage weight targets within $\pm 0.3\text{g}$.
-* **R3.3 Advanced Phase Targets:** Support linear/exponential transitions between target pressure and target flow regimes (e.g., constant 2 ml/s pre-infusion $\to$ 9 bar peak $\to$ declining 1.5 ml/s flow finish).
-
-### R4. Headless Operation & Smart Home Telemetry
-* **R4.1 Headless Core:** First-class headless ESP32 binary operation without display hardware dependency.
-* **R4.2 Home Assistant / MQTT Discovery:** Auto-discovery for boiler warm-up scheduling, live extraction metrics (pressure, flow rate, puck resistance, scale weight, water volume), and recipe selection.
-* **R4.3 Web UI Configuration:** Responsive local web interface for calibration wizards, recipe authoring, and real-time shot charting.
-
-### R5. Physical & Mechanical Calibration Guards
-* **R5.1 Phantom Flow & OPV Protection:** Safe pressure bounding in software to prevent reaching mechanical OPV bypass crack pressure (e.g. OPV set to 11–12 bar, software capping at 9 bar), preventing phantom flow divergence.
-* **R5.2 Solenoid Coil Thermal Fade Compensation:** Thermal model tracking cumulative pump power dissipation with exponential idle cooling, applying real-time compensation scalars to $Q_{\text{max}}$ and $P_{\text{stall}}$.
+To guarantee safety, eliminate ESP-IDF / Arduino RTOS coupling, and enable 100% desktop automated verification (`pio test -e native`):
+```
+gaggimate/
+├── lib/
+│   └── control_physics/          # Pure C++20 header modules (zero external framework deps)
+│       ├── ThermalObserver.hpp   # 2-Node state observer, Smith predictor & flow feed-forward
+│       ├── PumpSurface.hpp       # Convex P-Q-Duty surface, coil thermal fade & RLS scale adapter
+│       ├── ComplianceModel.hpp   # Dynamic dP/dt volume compensation & Darcy Rpuck channeling guard
+│       ├── FlashSteamEngine.hpp  # Closed-loop pressure-targeted steam injection controller
+│       └── AutoCalibrator.hpp    # State machines for Hydraulic & Relay Thermal autotune wizards
+├── test/
+│   └── test_native_physics/      # Desktop Software-in-the-Loop (SIL) Plant Simulator
+│       ├── VirtualGaggiaPlant.hpp# ODE solver (boiler, group, Ulka pump, air compliance & puck)
+│       └── test_controllers.cpp  # Automated unit & E2E assertions (`pio test -e native`)
+└── src/
+    ├── controller/               # Thin adapter binding control_physics into 50Hz/100Hz ISR
+    └── display/                  # Wireless magnetic remote power manager & Grind Advisor UI
+```
 
 ---
 
-## 2. Codebase Baseline & Gap Analysis
+## 2. Master Requirements Backlog
 
-| Component | Upstream State (`jniebuhr/gaggimate`) | Gap / Planned Work |
-| :--- | :--- | :--- |
-| **`PressureController`** | Contains basic affine model ($Q_{\text{geo}} - \text{slip}$) and puck conductance state machine. | `getPumpDutyCycleForFlowRate()` is open-loop feedforward; `setFlowLimit()` / `setPressureLimit()` are no-op stubs; lacks dynamic feedback PID. |
-| **Pump Calibration** | Static hard-coded coefficients in code/settings. | Needs automated BLE-assisted 2-step calibration wizard (Open Flow + Blind Stall) and NVS surface storage. |
-| **Thermal Fade** | None. Coil heating causes 10–15% flow/pressure drop during sustained use. | Implement thermal energy accumulator with exponential decay constant. |
-| **Recipe Engine** | Basic sequential phases with single target checks. | Refactor into compound boolean state machine (`TargetOperator::AND`, `TargetOperator::OR`). |
-| **Predictive Stop** | `VolumetricRateCalculator` exists in `predictive.h` with linear regression slope. | Connect directly to BLE scale $dm/dt$ and solenoid cut-off timing. |
-| **Headless Build** | Headless configs exist in `platformio.ini`. | Validate headless build parity with all new flow profiling logic. |
+### R1. Front-Loaded Thermodynamic Model & Thermal Control (`ThermalObserver.hpp`)
+* **R1.1 Two-Node State-Space Observer:**
+  * Modeled with boiler node ($C_b \approx 795.1\text{ J/K}$) and brass group head node ($C_g \approx 437.0\text{ J/K}$).
+  * Estimates true water temperature $T_b(t)$ and unmeasured group temperature $T_g(t)$ at $50\text{ Hz}$.
+  * Conductive flange conductance $G_{b \to g} \approx 2.8\text{ W/K}$; group transit fraction $\gamma_g \approx 0.18$.
+* **R1.2 Dynamic Warmup Offset Compensation:**
+  * Computes puck water entry temperature: $\hat{T}_{\text{puck}}(t) = \hat{T}_b(t) - \gamma_g (\hat{T}_b(t) - \hat{T}_g(t))$.
+  * Automatically injects up to $+4.5^\circ\text{C}$ overheat bias on cold boot, decaying to nominal as $\hat{T}_g$ soaks.
+* **R1.3 Zero-Lag Flow Feed-Forward ($u_{\text{ff}}$):**
+  * Instantaneous power injection: $P_{\text{ff}}(t) = 4.184 \cdot Q_{\text{raw}}(t) \cdot (T_{\text{set}}(t) - T_{\text{in}})$.
+  * Injects corresponding SSR duty $u_{\text{ff}} = \text{clamp}(P_{\text{ff}} / P_{\text{max}}, 0, 1)$ without sensor transport delay.
+* **R1.4 Smith Predictor Dead-Time Compensation:**
+  * Compensates for external shell sensor dead time ($\tau_d \approx 2.5\text{--}4.0\text{ s}$) using an internal delay ring buffer:
+    $\tilde{T}_b(t) = T_{\text{sens}}(t) + (\hat{T}_{b,\text{model}}(t) - \hat{T}_{b,\text{model}}(t - \tau_d))$.
+* **R1.5 Intra-Shot Thermal Profiling:**
+  * Support active intra-shot temperature curves (e.g. declining $94^\circ\text{C} \to 88^\circ\text{C}$ for bitter tannin reduction; ascending $88^\circ\text{C} \to 94^\circ\text{C}$).
+
+### R2. Non-Linear Fluid Dynamics & Hydraulic Compliance (`PumpSurface.hpp`, `ComplianceModel.hpp`)
+* **R2.1 Non-Linear Convex Pump Surface:**
+  * Empirical model: $Q_{\text{raw}}(P, D, E_{\text{coil}}) = \alpha_{\text{coil}}(E_{\text{coil}}) \cdot Q_{\text{max}}(D) \cdot \left[1 - \left(\frac{\min(P, P_{\text{stall}}'(D))}{P_{\text{stall}}'(D)}\right)^{\kappa(D)}\right]$.
+  * Fitted quadratics for $Q_{\text{max}}(D)$ and $P_{\text{stall}}'(D)$, with convexity exponent $\kappa(D) \in [1.25, 1.65]$.
+* **R2.2 Solenoid Coil Thermal Fade Model:**
+  * Dynamic energy accumulator: $\frac{dE_{\text{coil}}}{dt} = D^2 - \frac{E_{\text{coil}}}{\tau_{\text{cool}}}$ with $\tau_{\text{cool}} \approx 95\text{ s}$ and $\beta_{\text{fade}} \approx 0.0028\text{ s}^{-1}$.
+  * Scales $Q_{\text{max}}$ and $P_{\text{stall}}$ by $\alpha_{\text{coil}} = 1.0 - \beta_{\text{fade}} \cdot E_{\text{coil}}$.
+* **R2.3 Dynamic Hydraulic Compliance Observer:**
+  * Separates true puck flow from pump volume: $Q_{\text{puck}}(t) = \text{clamp}(Q_{\text{raw}}(t) - C_{\text{sys}}(P) \frac{dP}{dt}, 0, Q_{\text{max}}(1.0))$.
+  * Two-regime compliance model: $C_{\text{sys}}(P) = \frac{V_{\text{air},0}}{(P + 1.0)^2} + c_{\text{hose}}$.
+* **R2.4 Real-Time Darcy Puck Resistance & Auto-Save Channeling Guard:**
+  * Computes $R_{\text{puck}}(t) = \frac{P(t)}{Q_{\text{puck}}(t)^2 + \epsilon_0}$.
+  * If $\frac{d\ln R_{\text{puck}}}{dt} < -0.18\text{ s}^{-1}$ during extraction (channel blowout detected), instantly triggers protective flow-capped taper ($Q_{\text{target}} = 1.8\text{ ml/s}$).
+* **R2.5 Closed-Loop RLS Scale Calibration:**
+  * Recursive Least Squares parameter update ($\lambda = 0.05$) during steady pour against external BLE scale $\frac{dm}{dt}$.
+* **R2.6 Acoustic Half-Wave Skipping:**
+  * Bresenham integral half-wave skipping during low-pressure pre-infusion ($P < 2.5\text{ bar}$) for silent operation.
+
+### R3. Automated Zero-Expertise Calibration Wizards (`AutoCalibrator.hpp`)
+* **R3.1 Wizard 1: Hydraulic & Compliance Calibrator (3 Minutes):**
+  * Stage A (Open Flow): Steps $D \in [0.25, 0.40, 0.55, 0.70, 0.85, 1.00]$ for 4s into BLE scale; fits $Q_{\text{max}}(D)$.
+  * Stage B (Blind Basket): Runs $D=0.60$ to solve for $V_{\text{air},0}$ and $c_{\text{hose}}$ from $\frac{Q_{\text{raw}}}{dP/dt}$; checks OPV crack threshold; steps $D$ to record $P_{\text{stall}}(D)$.
+* **R3.2 Wizard 2: Relay-Feedback Thermal Autotuner (8 Minutes):**
+  * Stage A (Åström-Hägglund Limit-Cycle): Toggles SSR ($d=0.50$) around $88^\circ\text{C}$ with $\epsilon = 0.3^\circ\text{C}$ for 3 cycles. Computes $K_u$, $T_u$, $\tau_d$, and non-overshooting SIMC PI gains for Smith Predictor.
+  * Stage B (Cold-Water Disturbance): 100% open pump flow for 15s to calibrate heater efficiency $\eta$ and inlet $T_{\text{in}}$.
+
+### R4. Flash-Boiler Steam Engine (`FlashSteamEngine.hpp`)
+* **R4.1 Thermodynamic Influx Ceiling:**
+  * Enforces maximum continuous vaporization limit: $\dot{m}_{\text{flash,max}} = \frac{1370\text{ W}}{2646\text{ J/g}} \approx 0.518\text{ g/s}$ ($Q_{\text{raw}} \le 0.52\text{ ml/s}$).
+* **R4.2 Closed-Loop Pressure Injection:**
+  * Pre-purges and superheats boiler to $148^\circ\text{C}$ ($3.5\text{ bar}$).
+  * Detects knob opening via pressure drop rate ($\frac{dP}{dt} < -0.15\text{ bar/s}$).
+  * PI-modulated 2Hz pump phase-angle bursts maintaining continuous $P_{\text{steam,set}} = 2.2\text{ bar}$.
+
+### R5. Wireless Magnetic Display Remote (LilyGo T-RGB) & Grind Advisor
+* **R5.1 Thermal Isolation & Magnetic Enclosure:**
+  * 3D printed ASA/ABS/PC housing with 5.0mm ventilated standoff + 2.0mm silicone foam thermal barrier.
+  * 1200 mAh LiPo connected via onboard 1.25mm JST battery connector.
+* **R5.2 Display Power Management State Machine:**
+  * Active (190mA @ 60Hz LVGL) $\to$ Dimmed Idle (45mA @ 80MHz CPU) $\to$ Deep Sleep (<1.2mA, wake-on-touch via FT3267 `TP_INT` in <350ms).
+* **R5.3 Post-Shot Automated Grind Advisor:**
+  * Evaluates $t_{\text{compress}}$ and mean $\bar{R}_{\text{puck}}$ to recommend grind adjustments: $\Delta_{\text{grind}} = K_{\text{grind}} \ln(\bar{R}_{\text{actual}} / \bar{R}_{\text{target}})$.
+
+### R6. Desktop Software-in-the-Loop (SIL) Plant Simulator (`test/test_native_physics/`)
+* **R6.1 `VirtualGaggiaPlant.hpp`:** ODE plant solver simulating RI9480/14 thermal, hydraulic, and puck dynamics.
+* **R6.2 `test_controllers.cpp`:** Full assertion suite executed with `pio test -e native` verifying safety invariants, zero-droop thermal response, compliance isolation, and channeling auto-save.
 
 ---
 
-## 3. Verification & Testing Strategy
+## 3. Staged Rollout & Delivery Roadmap
 
-1. **Host-Side Unit Tests (`pio test -e native`):**
-   - `test_pump_model`: Verify LUT interpolation, surface fit equation, and edge-case clamping.
-   - `test_flow_pid`: Simulate closed-loop flow control against simulated hydraulic resistance.
-   - `test_thermal_fade`: Verify thermal accumulation and decay equations over shot bursts.
-   - `test_recipe_state_machine`: Unit test compound exit conditions (AND/OR, timeouts, predictive stop).
-2. **End-to-End Simulation (`sim/`):**
-   - Run software-in-the-loop brew simulation simulating puck saturation, channeling resistance breakdown, and scale latency.
-3. **Hardware In-The-Loop Validation (HIL):**
-   - Zero-backpressure flow sweep verification with physical scale.
-   - Blind basket stall pressure verification with 0–5V transducer.
+* [x] **Milestone 0: Baseline Setup & Initial Spec:** Master plan, repository fork, initial hardware audit.
+* [ ] **Milestone 1: Core Physics Library (`lib/control_physics/`):**
+  - Implement `ThermalObserver.hpp`, `PumpSurface.hpp`, `ComplianceModel.hpp`, `FlashSteamEngine.hpp`, and `AutoCalibrator.hpp`.
+* [ ] **Milestone 2: Desktop SIL Plant Simulator (`test/test_native_physics/`):**
+  - Implement `VirtualGaggiaPlant.hpp` and `test_controllers.cpp`.
+  - Validate 100% pass rate under `pio test -e native`.
+* [ ] **Milestone 3: Controller Firmware Hookup (`src/controller/`):**
+  - Hook pure C++20 domain models into 50Hz control ISR with zero-lag feed-forward and safety clamps.
+* [ ] **Milestone 4: Web UI & Calibration Wizards:**
+  - Wire Wizard 1 (Hydraulic) and Wizard 2 (Thermal) into Web UI and Home Assistant MQTT.
+* [ ] **Milestone 5: Wireless Magnetic Display Remote:**
+  - Implement 3-state power management on LilyGo T-RGB with wake-on-touch and Grind Advisor widget.
 
 ---
 
-## 4. Issues, Features & Revision Log
-
-* **[2026-10-21] Initial Setup:** Forked `jniebuhr/gaggimate` to `rholligan/gaggimate` at `C:\dev\gaggimate`. Analyzed existing `PressureController`, `predictive.h`, and `BrewProcess.h`. Master plan initiated.
-* **[Pending User Spec Update]:** Awaiting anticipated revisions to `espresso_controller_comparison_gaggimate_spec.md` later this evening.
+## 4. Verification & Testing Log
+* **Host Tests Target:** `pio test -e native`
+* **Target Embedded Builds:** `pio run -e controller`, `pio run -e display-headless`, `pio run -e display`
