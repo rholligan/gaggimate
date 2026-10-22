@@ -66,9 +66,7 @@ class AutoCalibrator {
     static constexpr std::array<float, kNumDutySteps> kDutySteps = {0.25f, 0.40f, 0.55f, 0.70f, 0.85f, 1.00f};
     static constexpr float kStepDurationSec = 4.0f;
 
-    AutoCalibrator(float dt = 0.02f) : dt_(dt) {
-        reset();
-    }
+    AutoCalibrator(float dt = 0.02f) : dt_(dt) { reset(); }
 
     void reset() noexcept {
         hydraulicState_ = HydraulicState::IDLE;
@@ -253,8 +251,8 @@ class AutoCalibrator {
 
     [[nodiscard]] HydraulicState getHydraulicState() const noexcept { return hydraulicState_; }
     [[nodiscard]] ThermalState getThermalState() const noexcept { return thermalState_; }
-    [[nodiscard]] const HydraulicResults& getHydraulicResults() const noexcept { return hydraulicResults_; }
-    [[nodiscard]] const ThermalResults& getThermalResults() const noexcept { return thermalResults_; }
+    [[nodiscard]] const HydraulicResults &getHydraulicResults() const noexcept { return hydraulicResults_; }
+    [[nodiscard]] const ThermalResults &getThermalResults() const noexcept { return thermalResults_; }
 
   private:
     void fitQMaxPolynomial() noexcept {

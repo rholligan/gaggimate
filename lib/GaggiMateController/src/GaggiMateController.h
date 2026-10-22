@@ -10,9 +10,9 @@
 #include <peripherals/HeaterCoordinator.h>
 #include <peripherals/LedController.h>
 #include <peripherals/Max31855Thermocouple.h>
+#include <peripherals/PhysicsControlCoordinator.h>
 #include <peripherals/PressureSensor.h>
 #include <peripherals/Pump.h>
-#include <peripherals/PhysicsControlCoordinator.h>
 #include <peripherals/SimpleRelay.h>
 #include <peripherals/addons/GearpumpAddon.h>
 #include <vector>

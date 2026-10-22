@@ -198,7 +198,7 @@ void WebUIPlugin::setupServer() {
         doc["progress"] = calMgr.getStepProgressPercent(millis());
         doc["last_error"] = calMgr.getLastError();
         doc["calibrated"] = calMgr.isCalibrated();
-        
+
         JsonArray qArr = doc["q_max"].to<JsonArray>();
         JsonArray pArr = doc["p_stall"].to<JsonArray>();
         JsonArray dArr = doc["duty_points"].to<JsonArray>();

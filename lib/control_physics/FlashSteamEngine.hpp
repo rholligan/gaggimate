@@ -11,24 +11,17 @@ namespace control_physics {
  */
 class FlashSteamEngine {
   public:
-    enum class State : uint8_t {
-        IDLE = 0,
-        SUPERHEAT = 1,
-        READY = 2,
-        STEAMING_INJECTION = 3
-    };
+    enum class State : uint8_t { IDLE = 0, SUPERHEAT = 1, READY = 2, STEAMING_INJECTION = 3 };
 
-    static constexpr float kDefaultPmax = 1370.0f;               // Heater power (W)
-    static constexpr float kDeltaHSteam = 2646.0f;               // Total enthalpy of vaporization J/g
-    static constexpr float kMaxInjectionRate = 0.518f;            // Maximum sustainable vaporization rate (ml/s)
-    static constexpr float kSuperheatTemp = 148.0f;              // Target superheat boiler temp (deg C)
-    static constexpr float kTargetSteamPressure = 2.2f;          // Target operating steam pressure (bar gauge)
-    static constexpr float kValveOpenThreshold = -0.15f;         // dP/dt threshold indicating steam wand opened (bar/s)
-    static constexpr float kValveClosedPressure = 2.7f;          // Pressure recovery indicating steam wand closed (bar gauge)
+    static constexpr float kDefaultPmax = 1370.0f;       // Heater power (W)
+    static constexpr float kDeltaHSteam = 2646.0f;       // Total enthalpy of vaporization J/g
+    static constexpr float kMaxInjectionRate = 0.518f;   // Maximum sustainable vaporization rate (ml/s)
+    static constexpr float kSuperheatTemp = 148.0f;      // Target superheat boiler temp (deg C)
+    static constexpr float kTargetSteamPressure = 2.2f;  // Target operating steam pressure (bar gauge)
+    static constexpr float kValveOpenThreshold = -0.15f; // dP/dt threshold indicating steam wand opened (bar/s)
+    static constexpr float kValveClosedPressure = 2.7f;  // Pressure recovery indicating steam wand closed (bar gauge)
 
-    FlashSteamEngine(float dt = 0.02f) : dt_(dt) {
-        reset();
-    }
+    FlashSteamEngine(float dt = 0.02f) : dt_(dt) { reset(); }
 
     void reset() noexcept {
         state_ = State::IDLE;
@@ -44,9 +37,7 @@ class FlashSteamEngine {
         integrator_ = 0.0f;
     }
 
-    void stopSteamMode() noexcept {
-        reset();
-    }
+    void stopSteamMode() noexcept { reset(); }
 
     void update(float boilerTemp, float pressureBar, float dP_dt, float &heaterDuty, float &pumpTargetFlow) noexcept {
         heaterDuty = 0.0f;

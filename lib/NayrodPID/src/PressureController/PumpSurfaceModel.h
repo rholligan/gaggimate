@@ -9,14 +9,14 @@
 struct PumpCalibrationData {
     static constexpr size_t NUM_POINTS = 5;
     float dutyPoints[NUM_POINTS] = {20.0f, 40.0f, 60.0f, 80.0f, 100.0f};
-    float qMaxPoints[NUM_POINTS] = {1.8f, 3.5f, 5.5f, 7.2f, 8.5f};      // ml/s at P=0
-    float pStallPoints[NUM_POINTS] = {4.0f, 6.5f, 9.5f, 12.0f, 14.0f};   // bar at Q=0
-    float systemCompliance = 1.4f;                                        // ml/bar
-    float thermalFadeFactor = 0.15f;                                      // kappa_fade
+    float qMaxPoints[NUM_POINTS] = {1.8f, 3.5f, 5.5f, 7.2f, 8.5f};     // ml/s at P=0
+    float pStallPoints[NUM_POINTS] = {4.0f, 6.5f, 9.5f, 12.0f, 14.0f}; // bar at Q=0
+    float systemCompliance = 1.4f;                                     // ml/bar
+    float thermalFadeFactor = 0.15f;                                   // kappa_fade
 
     bool isValid() const {
-        if (std::isnan(systemCompliance) || std::isnan(thermalFadeFactor) ||
-            std::isinf(systemCompliance) || std::isinf(thermalFadeFactor)) {
+        if (std::isnan(systemCompliance) || std::isnan(thermalFadeFactor) || std::isinf(systemCompliance) ||
+            std::isinf(thermalFadeFactor)) {
             return false;
         }
         if (systemCompliance < 0.2f || systemCompliance > 5.0f) {
@@ -125,8 +125,8 @@ class PumpSurfaceModel {
 
     // Evaluates delivered pump flow Q(P, Duty) in ml/s with boundary clamping and physical invariants.
     float getFlow(float pressureBar, float dutyPercent, float thermalScalar = 1.0f) const {
-        if (std::isnan(pressureBar) || std::isnan(dutyPercent) || std::isnan(thermalScalar) ||
-            dutyPercent <= _dutyDeadband || thermalScalar <= 0.0f) {
+        if (std::isnan(pressureBar) || std::isnan(dutyPercent) || std::isnan(thermalScalar) || dutyPercent <= _dutyDeadband ||
+            thermalScalar <= 0.0f) {
             return 0.0f;
         }
         const float qMax = getMaxFlow(dutyPercent, thermalScalar);
@@ -155,8 +155,7 @@ class PumpSurfaceModel {
         if (std::isnan(targetFlowMlS) || std::isnan(pressureBar) || std::isnan(thermalScalar)) {
             return 0.0f;
         }
-        if (targetFlowMlS <= 0.0f || thermalScalar <= 0.0f ||
-            std::isinf(targetFlowMlS) || std::isinf(thermalScalar) ||
+        if (targetFlowMlS <= 0.0f || thermalScalar <= 0.0f || std::isinf(targetFlowMlS) || std::isinf(thermalScalar) ||
             (std::isinf(pressureBar) && pressureBar > 0.0f)) {
             return 0.0f;
         }

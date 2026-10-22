@@ -2,8 +2,8 @@
 #ifndef DRIVER_H
 #define DRIVER_H
 
-#include <cstdint>
 #include <Arduino.h>
+#include <cstdint>
 
 class Driver {
   public:

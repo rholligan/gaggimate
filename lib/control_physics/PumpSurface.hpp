@@ -22,24 +22,20 @@ class PumpSurface {
         float c1{0.0f};
         float c0{0.0f};
 
-        [[nodiscard]] float eval(float x) const noexcept {
-            return c2 * x * x + c1 * x + c0;
-        }
+        [[nodiscard]] float eval(float x) const noexcept { return c2 * x * x + c1 * x + c0; }
     };
 
-    static constexpr float kDefaultTauCool = 95.0f;     // Coil thermal cooling time constant (s)
-    static constexpr float kDefaultBetaFade = 0.0028f;   // Coil thermal fade coefficient (1/s)
-    static constexpr float kMinAlphaCoil = 0.60f;       // Minimum coil degradation floor
-    static constexpr float kDefaultKappa = 1.45f;       // Empirical convexity exponent
+    static constexpr float kDefaultTauCool = 95.0f;    // Coil thermal cooling time constant (s)
+    static constexpr float kDefaultBetaFade = 0.0028f; // Coil thermal fade coefficient (1/s)
+    static constexpr float kMinAlphaCoil = 0.60f;      // Minimum coil degradation floor
+    static constexpr float kDefaultKappa = 1.45f;      // Empirical convexity exponent
 
     PumpSurface(float dt = 0.02f) : dt_(dt) {
         resetCoil();
         setDefaultCalibration();
     }
 
-    void resetCoil() noexcept {
-        E_coil_ = 0.0f;
-    }
+    void resetCoil() noexcept { E_coil_ = 0.0f; }
 
     void setDefaultCalibration() noexcept {
         // Factory baseline for 50Hz Ulka EX5 on 230-240V mains:
@@ -54,17 +50,11 @@ class PumpSurface {
         kappa_ = kDefaultKappa;
     }
 
-    void setQMaxPoly(float c2, float c1, float c0) noexcept {
-        qMaxPoly_ = {c2, c1, c0};
-    }
+    void setQMaxPoly(float c2, float c1, float c0) noexcept { qMaxPoly_ = {c2, c1, c0}; }
 
-    void setPStallPoly(float c2, float c1, float c0) noexcept {
-        pStallPoly_ = {c2, c1, c0};
-    }
+    void setPStallPoly(float c2, float c1, float c0) noexcept { pStallPoly_ = {c2, c1, c0}; }
 
-    void setConvexity(float kappa) noexcept {
-        kappa_ = std::clamp(kappa, 1.1f, 2.0f);
-    }
+    void setConvexity(float kappa) noexcept { kappa_ = std::clamp(kappa, 1.1f, 2.0f); }
 
     /**
      * @brief Updates solenoid coil thermal energy accumulator:
@@ -87,7 +77,8 @@ class PumpSurface {
      * @brief Evaluates open-circuit flow Q_max(D) in ml/s at P = 0 bar.
      */
     [[nodiscard]] float getQMax(float duty) const noexcept {
-        if (duty <= 0.01f) return 0.0f;
+        if (duty <= 0.01f)
+            return 0.0f;
         const float D = std::clamp(duty, 0.0f, 1.0f);
         return std::max(0.0f, qMaxPoly_.eval(D));
     }
@@ -97,7 +88,8 @@ class PumpSurface {
      *        scaled by current coil thermal degradation.
      */
     [[nodiscard]] float getPStall(float duty) const noexcept {
-        if (duty <= 0.01f) return 0.0f;
+        if (duty <= 0.01f)
+            return 0.0f;
         const float D = std::clamp(duty, 0.0f, 1.0f);
         const float unadjustedPstall = std::max(0.0f, pStallPoly_.eval(D));
         return getCoilAlpha() * unadjustedPstall;

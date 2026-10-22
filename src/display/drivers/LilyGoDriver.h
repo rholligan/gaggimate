@@ -18,12 +18,8 @@ class LilyGoDriver : public Driver {
         panel.enableTouchWakeup();
         panel.sleep();
     }
-    void wakeup() override {
-        panel.wakeup();
-    }
-    uint16_t getBatteryVoltage() override {
-        return panel.getBattVoltage();
-    }
+    void wakeup() override { panel.wakeup(); }
+    uint16_t getBatteryVoltage() override { return panel.getBattVoltage(); }
     void setLowPowerFrequency(bool lowPower) override {
 #if !defined(GAGGIMATE_SIM)
         setCpuFrequencyMhz(lowPower ? 80 : 240);

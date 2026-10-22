@@ -83,13 +83,9 @@ void PhysicsControlCoordinator::setSteamMode(bool enabled) {
     }
 }
 
-void PhysicsControlCoordinator::startHydraulicCalibration() {
-    _autoCalibrator.startHydraulicCalibration();
-}
+void PhysicsControlCoordinator::startHydraulicCalibration() { _autoCalibrator.startHydraulicCalibration(); }
 
-void PhysicsControlCoordinator::startThermalAutotune(float T_ref) {
-    _autoCalibrator.startThermalAutotune(T_ref);
-}
+void PhysicsControlCoordinator::startThermalAutotune(float T_ref) { _autoCalibrator.startThermalAutotune(T_ref); }
 
 void PhysicsControlCoordinator::stop() {
     _targetFlow = 0.0f;
@@ -263,50 +259,26 @@ void PhysicsControlCoordinator::tick50Hz() {
     applySsrDuty(ssrDuty);
 }
 
-float PhysicsControlCoordinator::getBoilerTempEst() const noexcept {
-    return _thermalObserver.getBoilerTempEstimate();
-}
+float PhysicsControlCoordinator::getBoilerTempEst() const noexcept { return _thermalObserver.getBoilerTempEstimate(); }
 
-float PhysicsControlCoordinator::getGroupTempEst() const noexcept {
-    return _thermalObserver.getGroupTempEstimate();
-}
+float PhysicsControlCoordinator::getGroupTempEst() const noexcept { return _thermalObserver.getGroupTempEstimate(); }
 
-float PhysicsControlCoordinator::getPuckTempEst() const noexcept {
-    return _thermalObserver.estimatePuckTemperature();
-}
+float PhysicsControlCoordinator::getPuckTempEst() const noexcept { return _thermalObserver.estimatePuckTemperature(); }
 
-float PhysicsControlCoordinator::getPuckFlow() const noexcept {
-    return _lastPuckFlow;
-}
+float PhysicsControlCoordinator::getPuckFlow() const noexcept { return _lastPuckFlow; }
 
-float PhysicsControlCoordinator::getPumpFlow() const noexcept {
-    return _lastPumpFlow;
-}
+float PhysicsControlCoordinator::getPumpFlow() const noexcept { return _lastPumpFlow; }
 
-float PhysicsControlCoordinator::getPuckResistance() const noexcept {
-    return _complianceModel.getPuckResistance();
-}
+float PhysicsControlCoordinator::getPuckResistance() const noexcept { return _complianceModel.getPuckResistance(); }
 
-float PhysicsControlCoordinator::getPressure() const noexcept {
-    return _pressureSensor ? _pressureSensor->getPressure() : 0.0f;
-}
+float PhysicsControlCoordinator::getPressure() const noexcept { return _pressureSensor ? _pressureSensor->getPressure() : 0.0f; }
 
-float PhysicsControlCoordinator::getSsrDuty() const noexcept {
-    return _lastSsrDuty;
-}
+float PhysicsControlCoordinator::getSsrDuty() const noexcept { return _lastSsrDuty; }
 
-float PhysicsControlCoordinator::getPumpDuty() const noexcept {
-    return _lastPumpDuty;
-}
+float PhysicsControlCoordinator::getPumpDuty() const noexcept { return _lastPumpDuty; }
 
-bool PhysicsControlCoordinator::isChannelingAutoSaveActive() const noexcept {
-    return _complianceModel.isAutoSaveActive();
-}
+bool PhysicsControlCoordinator::isChannelingAutoSaveActive() const noexcept { return _complianceModel.isAutoSaveActive(); }
 
-bool PhysicsControlCoordinator::isEmergencyTripped() const noexcept {
-    return _emergencyTripped;
-}
+bool PhysicsControlCoordinator::isEmergencyTripped() const noexcept { return _emergencyTripped; }
 
-bool PhysicsControlCoordinator::isSteaming() const noexcept {
-    return _isSteaming;
-}
+bool PhysicsControlCoordinator::isSteaming() const noexcept { return _isSteaming; }

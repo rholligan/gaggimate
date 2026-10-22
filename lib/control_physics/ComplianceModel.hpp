@@ -27,9 +27,7 @@ class ComplianceModel {
     static constexpr float kChannelingThreshold = -0.18f; // d(ln R)/dt threshold for channel blowout (1/s)
     static constexpr float kAutoSaveFlowTarget = 1.8f;    // Protective capped flow setpoint (ml/s)
 
-    ComplianceModel(float dt = 0.02f) : dt_(dt) {
-        reset();
-    }
+    ComplianceModel(float dt = 0.02f) : dt_(dt) { reset(); }
 
     void reset() noexcept {
         P_prev_ = 0.0f;

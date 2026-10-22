@@ -5,15 +5,15 @@
 #include <display/drivers/Driver.h>
 
 enum class DisplayPowerState {
-    ACTIVE,      // 190mA @ 240MHz, full brightness, 60Hz UI
-    DIMMED,      // 45mA @ 80MHz, 15% backlight PWM
-    DEEP_SLEEP   // <1.2mA, panel off, FT3267 wake-on-touch
+    ACTIVE,    // 190mA @ 240MHz, full brightness, 60Hz UI
+    DIMMED,    // 45mA @ 80MHz, 15% backlight PWM
+    DEEP_SLEEP // <1.2mA, panel off, FT3267 wake-on-touch
 };
 
 class PowerManager {
-public:
-    static constexpr uint32_t INACTIVITY_DIM_MS = 45000;      // 45 seconds
-    static constexpr uint32_t INACTIVITY_SLEEP_MS = 300000;   // 5 minutes
+  public:
+    static constexpr uint32_t INACTIVITY_DIM_MS = 45000;    // 45 seconds
+    static constexpr uint32_t INACTIVITY_SLEEP_MS = 300000; // 5 minutes
 
     explicit PowerManager(Driver *driver);
     void setup();
@@ -30,7 +30,7 @@ public:
 
     void onStandbyMessage() { enterDeepSleep(); }
 
-private:
+  private:
     Driver *driver_{nullptr};
     DisplayPowerState currentState_{DisplayPowerState::ACTIVE};
     uint32_t lastActivityTime_{0};

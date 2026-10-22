@@ -18,19 +18,19 @@ namespace control_physics {
 class ThermalObserver {
   public:
     // Physical thermal constants for RI9480/14 dry-cast aluminum boiler + brass group
-    static constexpr float kDefaultCb = 795.1f;       // Effective boiler thermal capacitance (J/K) [Cw ~418.4, C_Al ~376.7]
-    static constexpr float kDefaultCg = 437.0f;       // Brass group head thermal capacitance (J/K) [1.15 kg * 380 J/kg*K]
-    static constexpr float kDefaultGbg = 2.8f;        // Flange conductive conductance boiler -> group (W/K)
-    static constexpr float kDefaultGbAmb = 0.9f;      // Convective loss boiler -> ambient (W/K)
-    static constexpr float kDefaultGgAmb = 1.6f;      // Convective loss group -> ambient (W/K)
-    static constexpr float kDefaultGammaG = 0.18f;     // Water thermal equilibration fraction in group passageway
-    static constexpr float kCpWater = 4184.0f;        // Specific heat capacity of water (J/(kg*K))
-    static constexpr float kDefaultPmax = 1490.0f;    // Heater power at 240V UK mains (W) [1370W @ 230V]
-    static constexpr float kDefaultEta = 0.95f;       // Heater coupling efficiency
-    static constexpr float kDefaultDeadTime = 3.0f;   // Sensor thermal transport dead-time tau_d (s)
-    static constexpr float kMaxWarmupBias = 4.5f;     // Maximum allowed boiler overheat bias during cold group soak (deg C)
-    static constexpr float kOverheatCutoff = 155.0f;   // Hardware safety shutoff temperature (deg C)
-    static constexpr size_t kMaxDelaySteps = 250;     // Max circular buffer length (5.0s @ 50Hz)
+    static constexpr float kDefaultCb = 795.1f;      // Effective boiler thermal capacitance (J/K) [Cw ~418.4, C_Al ~376.7]
+    static constexpr float kDefaultCg = 437.0f;      // Brass group head thermal capacitance (J/K) [1.15 kg * 380 J/kg*K]
+    static constexpr float kDefaultGbg = 2.8f;       // Flange conductive conductance boiler -> group (W/K)
+    static constexpr float kDefaultGbAmb = 0.9f;     // Convective loss boiler -> ambient (W/K)
+    static constexpr float kDefaultGgAmb = 1.6f;     // Convective loss group -> ambient (W/K)
+    static constexpr float kDefaultGammaG = 0.18f;   // Water thermal equilibration fraction in group passageway
+    static constexpr float kCpWater = 4184.0f;       // Specific heat capacity of water (J/(kg*K))
+    static constexpr float kDefaultPmax = 1490.0f;   // Heater power at 240V UK mains (W) [1370W @ 230V]
+    static constexpr float kDefaultEta = 0.95f;      // Heater coupling efficiency
+    static constexpr float kDefaultDeadTime = 3.0f;  // Sensor thermal transport dead-time tau_d (s)
+    static constexpr float kMaxWarmupBias = 4.5f;    // Maximum allowed boiler overheat bias during cold group soak (deg C)
+    static constexpr float kOverheatCutoff = 155.0f; // Hardware safety shutoff temperature (deg C)
+    static constexpr size_t kMaxDelaySteps = 250;    // Max circular buffer length (5.0s @ 50Hz)
 
     ThermalObserver(float dt = 0.02f, float Pmax = kDefaultPmax, float deadTime = kDefaultDeadTime)
         : dt_(dt), Pmax_(Pmax), deadTime_(deadTime) {
@@ -52,8 +52,10 @@ class ThermalObserver {
     void setDeadTime(float deadTimeSec) {
         deadTime_ = deadTimeSec;
         delaySteps_ = static_cast<size_t>(std::round(deadTime_ / dt_));
-        if (delaySteps_ < 1) delaySteps_ = 1;
-        if (delaySteps_ >= kMaxDelaySteps) delaySteps_ = kMaxDelaySteps - 1;
+        if (delaySteps_ < 1)
+            delaySteps_ = 1;
+        if (delaySteps_ >= kMaxDelaySteps)
+            delaySteps_ = kMaxDelaySteps - 1;
     }
 
     void setGains(float Kp, float Ti, float Td = 0.0f) {
@@ -70,9 +72,7 @@ class ThermalObserver {
      * @brief Dynamic group warmup compensation: computes the expected water temperature
      *        entering the coffee puck based on current boiler and group temperatures.
      */
-    [[nodiscard]] float estimatePuckTemperature() const noexcept {
-        return Tb_est_ - kDefaultGammaG * (Tb_est_ - Tg_est_);
-    }
+    [[nodiscard]] float estimatePuckTemperature() const noexcept { return Tb_est_ - kDefaultGammaG * (Tb_est_ - Tg_est_); }
 
     /**
      * @brief Computes dynamic setpoint bias needed to deliver target temp to puck
@@ -178,8 +178,7 @@ class ThermalObserver {
         const float tentativeDuty = p_term + tentativeIntegral + d_term + u_ff;
 
         // Only integrate if not saturating or if error opposes saturation direction
-        if ((tentativeDuty >= 0.0f && tentativeDuty <= 1.0f) ||
-            (tentativeDuty > 1.0f && error < 0.0f) ||
+        if ((tentativeDuty >= 0.0f && tentativeDuty <= 1.0f) || (tentativeDuty > 1.0f && error < 0.0f) ||
             (tentativeDuty < 0.0f && error > 0.0f)) {
             integrator_ = tentativeIntegral;
         }
@@ -206,8 +205,8 @@ class ThermalObserver {
     float Ti_ = 35.0f;
     float Td_ = 0.5f;
 
-    float Tin_ = 18.0f;   // UK mains inlet cold water temp (deg C)
-    float Tamb_ = 20.0f;  // Ambient room/chassis temp (deg C)
+    float Tin_ = 18.0f;  // UK mains inlet cold water temp (deg C)
+    float Tamb_ = 20.0f; // Ambient room/chassis temp (deg C)
     float eta_ = kDefaultEta;
 
     float Tb_est_ = 20.0f;

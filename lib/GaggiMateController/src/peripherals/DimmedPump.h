@@ -42,7 +42,7 @@ class DimmedPump : public Pump {
     float getFlowTarget() { return _ctrlFlow; }
     float *getPumpPowerPtr() override { return &_power; } // For external pump control
     float getPowerTarget() const override { return _power; }
-    float *getPumpFlowPtr() { return &_currentFlow; }     // For thermal feedforward
+    float *getPumpFlowPtr() { return &_currentFlow; } // For thermal feedforward
     float getPumpedWater() { return _pumpedWater; }
     int *getValveStatusPtr() { return &_valveStatus; } // For thermal feedforward valve state
     bool isPreinfusionActive() const { return _currentPressure < PREINFUSION_PRESSURE_BAR && _power > 0.0f; }

@@ -9,9 +9,7 @@
 CalibrationManager::CalibrationManager() : _cal(), _model() {}
 
 CalibrationManager::CalibrationManager(const PumpCalibrationData &initialCal)
-    : _cal(initialCal.isValid() ? initialCal : PumpCalibrationData()),
-      _model(_cal),
-      _isCalibrated(initialCal.isValid()) {}
+    : _cal(initialCal.isValid() ? initialCal : PumpCalibrationData()), _model(_cal), _isCalibrated(initialCal.isValid()) {}
 
 const char *CalibrationManager::getStateString() const {
     switch (_state) {
@@ -214,9 +212,8 @@ void CalibrationManager::update(uint32_t nowMs, float currentPressure, float sca
 void CalibrationManager::finishOpenFlowStep(uint32_t nowMs, float scaleMass) {
     const float deltaM = scaleMass - _settleStartMass;
     const uint32_t settleElapsedMs = nowMs - _settleStartTimeMs;
-    const float deltaT = (_settleStarted && settleElapsedMs <= SAFETY_TIMEOUT_MS)
-                             ? (static_cast<float>(settleElapsedMs) / 1000.0f)
-                             : 4.0f;
+    const float deltaT =
+        (_settleStarted && settleElapsedMs <= SAFETY_TIMEOUT_MS) ? (static_cast<float>(settleElapsedMs) / 1000.0f) : 4.0f;
     const float flow = (deltaT > 0.05f) ? (deltaM / deltaT) : 0.0f;
 
     // Safety check: if duty >= 40% and mass delta < 1.0g over 5s, flag low flow

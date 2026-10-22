@@ -1,20 +1,20 @@
 #ifndef CONTROLLER_H
 #define CONTROLLER_H
 
+#include "CalibrationManager.h"
 #include "GaggiMateClient.h"
 #include "PluginManager.h"
 #include "Settings.h"
 #include "SystemInfo.h"
-#include "CalibrationManager.h"
 #include <WiFi.h>
 #include <atomic>
 #include <display/core/ButtonHandler.h>
+#include <display/core/GrindAdvisor.h>
 #include <display/core/ProfileManager.h>
 #include <display/core/WarningManager.h>
 #include <display/core/process/Process.h>
 #include <mutex>
 #include <vector>
-#include <display/core/GrindAdvisor.h>
 #ifndef GAGGIMATE_HEADLESS
 #include <display/core/PowerManager.h>
 #include <display/drivers/Driver.h>

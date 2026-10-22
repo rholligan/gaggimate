@@ -194,12 +194,8 @@ void GaggiMateController::setup() {
     }
     if (_config.capabilites.pressure && _config.capabilites.dimming) {
         auto dimmedPump = static_cast<DimmedPump *>(pump);
-        physicsCoordinator = new PhysicsControlCoordinator(
-            this->brewTemperature,
-            this->pressureSensor,
-            dimmedPump,
-            this->valve,
-            _config.heaterPin);
+        physicsCoordinator = new PhysicsControlCoordinator(this->brewTemperature, this->pressureSensor, dimmedPump, this->valve,
+                                                           _config.heaterPin);
         physicsCoordinator->setup();
     }
     // Initialize last ping time
@@ -522,7 +518,8 @@ void GaggiMateController::thermalRunawayShutdown() {
 
 void GaggiMateController::sendSensorData() {
     const float pumpPower = *pump->getPumpPowerPtr();
-    const float heaterPower = physicsCoordinator ? physicsCoordinator->getSsrDuty() * 100.0f : (heater ? heater->getDutyCycle() : 0.0f);
+    const float heaterPower =
+        physicsCoordinator ? physicsCoordinator->getSsrDuty() * 100.0f : (heater ? heater->getDutyCycle() : 0.0f);
     float puckFlow = 0.0f;
     float pumpFlow = 0.0f;
     float puckResistance = 0.0f;

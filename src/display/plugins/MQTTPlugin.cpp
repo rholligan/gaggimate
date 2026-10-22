@@ -204,8 +204,7 @@ void MQTTPlugin::setup(Controller *controller, PluginManager *pluginManager) {
         String advice = event.getString("advice");
 
         char json[256];
-        snprintf(json, sizeof(json),
-                 R"({"actual_resistance":%.2f,"target_resistance":%.2f,"delta_steps":%.2f,"advice":"%s"})",
+        snprintf(json, sizeof(json), R"({"actual_resistance":%.2f,"target_resistance":%.2f,"delta_steps":%.2f,"advice":"%s"})",
                  actual, target, delta, advice.c_str());
 
         publish("telemetry/grind_advisor", json);

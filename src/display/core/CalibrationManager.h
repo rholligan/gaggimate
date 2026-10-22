@@ -15,15 +15,7 @@
 //         to determine Pstall(Duty).
 class CalibrationManager {
   public:
-    enum class State {
-        IDLE,
-        SWEEP_OPEN_FLOW,
-        AWAIT_BLIND_BASKET,
-        SWEEP_STALL,
-        COMPUTING_FIT,
-        SAVED,
-        ERROR_ABORT
-    };
+    enum class State { IDLE, SWEEP_OPEN_FLOW, AWAIT_BLIND_BASKET, SWEEP_STALL, COMPUTING_FIT, SAVED, ERROR_ABORT };
 
     static constexpr size_t NUM_POINTS = PumpCalibrationData::NUM_POINTS;
     static constexpr uint32_t STEP_DWELL_MS = 5000;      // 5 seconds dwell per duty node

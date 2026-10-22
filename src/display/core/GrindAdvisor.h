@@ -7,18 +7,18 @@
 #include <string>
 
 struct GrindRecommendation {
-    float actualResistance{0.0f};  // bar*s^2/ml^2 (or bar / (ml/s)^2)
+    float actualResistance{0.0f}; // bar*s^2/ml^2 (or bar / (ml/s)^2)
     float targetResistance{1.8f};
-    float deltaGrindSteps{0.0f};   // negative = finer, positive = coarser
-    float timeToCompress{0.0f};    // seconds to peak resistance
+    float deltaGrindSteps{0.0f}; // negative = finer, positive = coarser
+    float timeToCompress{0.0f};  // seconds to peak resistance
     bool isValid{false};
     std::string adviceText{};
 };
 
 class GrindAdvisor {
-public:
+  public:
     static constexpr float kDefaultKGrind = 3.0f;           // Steps per log resistance unit
-    static constexpr float kDefaultTargetResistance = 1.8f;  // Nominal 9 bar @ 2.2 ml/s (1.85 bar*s^2/ml^2)
+    static constexpr float kDefaultTargetResistance = 1.8f; // Nominal 9 bar @ 2.2 ml/s (1.85 bar*s^2/ml^2)
 
     GrindAdvisor() = default;
 
@@ -50,14 +50,12 @@ public:
         }
     }
 
-    GrindRecommendation onShotEnd(float targetR = kDefaultTargetResistance,
-                                  float kGrind = kDefaultKGrind) {
+    GrindRecommendation onShotEnd(float targetR = kDefaultTargetResistance, float kGrind = kDefaultKGrind) {
         lastRecommendation_ = evaluate(targetR, kGrind);
         return lastRecommendation_;
     }
 
-    [[nodiscard]] GrindRecommendation evaluate(float targetR = kDefaultTargetResistance,
-                                               float kGrind = kDefaultKGrind) const {
+    [[nodiscard]] GrindRecommendation evaluate(float targetR = kDefaultTargetResistance, float kGrind = kDefaultKGrind) const {
         GrindRecommendation rec{};
         rec.targetResistance = targetR;
         rec.timeToCompress = timeToPeak_;
@@ -87,9 +85,7 @@ public:
         return rec;
     }
 
-    [[nodiscard]] const GrindRecommendation &getLastRecommendation() const {
-        return lastRecommendation_;
-    }
+    [[nodiscard]] const GrindRecommendation &getLastRecommendation() const { return lastRecommendation_; }
 
     [[nodiscard]] uint32_t getSampleCount() const { return sampleCount_; }
 
@@ -100,7 +96,7 @@ public:
     [[nodiscard]] float getPeakResistance() const { return peakResistance_; }
     [[nodiscard]] float getTimeToPeak() const { return timeToPeak_; }
 
-private:
+  private:
     float sumRpuck_{0.0f};
     uint32_t sampleCount_{0};
     float peakResistance_{0.0f};

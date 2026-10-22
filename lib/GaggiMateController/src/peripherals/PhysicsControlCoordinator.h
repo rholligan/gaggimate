@@ -33,8 +33,8 @@ class PhysicsControlCoordinator {
   public:
     enum class ControlMode : uint8_t { FLOW = 0, PRESSURE = 1, POWER = 2 };
 
-    PhysicsControlCoordinator(TemperatureSensor *tempSensor, PressureSensor *pressureSensor, DimmedPump *pump,
-                              SimpleRelay *valve, uint8_t ssrPin);
+    PhysicsControlCoordinator(TemperatureSensor *tempSensor, PressureSensor *pressureSensor, DimmedPump *pump, SimpleRelay *valve,
+                              uint8_t ssrPin);
     ~PhysicsControlCoordinator();
 
     void setup();
