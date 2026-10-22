@@ -34,6 +34,25 @@ gaggimate/
 
 ## 2. Master Requirements Backlog
 
+### R0. Upstream Repository Standards & Maintainer Invariants (`CONTRIBUTING.md` Compliance)
+* **R0.1 Formatting & Style Enforcement:**
+  - Mandatory conformance to repository [.clang-format](file:///C:/dev/gaggimate/.clang-format) (`BasedOnStyle: LLVM`, `IndentWidth: 4`, `ColumnLimit: 130`) across all C/C++ domain models, drivers, and plugins.
+  - Web UI code must adhere to Prettier standards (`web/package.json`: `npm run format`).
+  - Markdown documentation formatted cleanly without line noise.
+* **R0.2 Static Analysis Quality Gate:**
+  - Zero defects under PlatformIO Cppcheck on all target firmware environments:
+    - Controller: `platformio check -e controller --fail-on-defect=medium -f "-<*>" -f "+<src/controller/>"`
+    - Display: `platformio check -e display --fail-on-defect=medium -f "-<*>" -f "+<src/display/>" -f "-<src/display/ui>"`
+* **R0.3 Architectural Decoupling & Dual-Node Boundaries:**
+  - Controller firmware (`lib/GaggiMateController/`, `src/controller/`): Dedicated to real-time hardware control, triac zero-crossing dimmer timing, 500 SPS transducer polling, and latched safety invariants ($u_{\text{SSR}} \equiv 0$ on thermal runaway or sensor fault).
+  - Display remote (`src/display/`): Coordinates UI, state machines, Wi-Fi, MQTT, and Home Assistant discovery strictly through the event-driven `PluginManager` architecture.
+  - BLE Communication: Adheres strictly to Protocol Buffers schema defined in `lib/NanoPbComm/proto/gaggimate.proto`.
+  - Pure Physics Library (`lib/control_physics/`): Isolated C++20 domain headers completely decoupled from Arduino/ESP-IDF RTOS for 100% host desktop testing.
+* **R0.4 Target Build Integrity:**
+  - Every commit must produce clean, non-regressing compilation for all PlatformIO targets: `controller`, `display-headless`, and `display`.
+* **R0.5 Contributor License Agreement (CLA) Tracking:**
+  - Formal tracking of CLA compliance requiring contact with `@jniebuhr` (`mdwasp` on Discord) prior to submitting upstream Pull Requests from `rholligan/gaggimate` to `jniebuhr/gaggimate`.
+
 ### R1. Front-Loaded Thermodynamic Model & Thermal Control (`ThermalObserver.hpp`)
 * **R1.1 Two-Node State-Space Observer:**
   * Modeled with boiler node ($C_b \approx 795.1\text{ J/K}$) and brass group head node ($C_g \approx 437.0\text{ J/K}$).
@@ -102,7 +121,10 @@ gaggimate/
 
 ## 3. Staged Rollout & Delivery Roadmap
 
-* [x] **Milestone 0: Baseline Setup & Initial Spec:** Master plan, repository fork, initial hardware audit.
+* [x] **Milestone 0: Baseline Setup & Upstream Standards (`CONTRIBUTING.md`):**
+  - Master plan, repository fork, and initial hardware audit.
+  - Verification of upstream coding standards, `.clang-format` enforcement, and Cppcheck static analysis with 0 defects.
+  - CLA requirements and dual-MCU architectural invariants established as non-negotiable project baselines.
 * [x] **Milestone 1: Core Physics Library (`lib/control_physics/`):**
   - Implemented `ThermalObserver.hpp` (2-node lumped capacitance, dynamic warmup bias, zero-lag feed-forward, Smith predictor).
   - Implemented `PumpSurface.hpp` (Convex Ulka model, coil thermal fade accumulator, RLS scale adaptation).
@@ -129,6 +151,10 @@ gaggimate/
 ---
 
 ## 4. Verification & Testing Log
+* **Upstream Standards & Static Analysis:**
+  - `clang-format`: Formatted with `.clang-format` (`BasedOnStyle: LLVM`, `IndentWidth: 4`, `ColumnLimit: 130`).
+  - `pio check -e controller`: **PASSED (0 defects found)**
+  - `pio check -e display`: **PASSED (0 defects found)**
 * **Host Tests (`pio test -e native`):**
   - `test_native_physics`: **16/16 PASSED** (Desktop SIL Plant Simulator & Pure C++20 Domain Library)
   - `test_pump_surface_model`: **16/16 PASSED** (Pump surface fit, nodal interpolation, bisection inversion)
