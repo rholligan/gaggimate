@@ -3,6 +3,7 @@
 #include <LittleFS.h>
 #include <SD_MMC.h>
 #include <algorithm>
+#include <display/core/CalibrationManager.h>
 #include <display/core/Controller.h>
 #include <display/core/ProfileImage.h>
 #include <display/core/ProfileManager.h>
@@ -184,6 +185,82 @@ void WebUIPlugin::setupServer() {
     server.on("/api/scales/scan", [this](AsyncWebServerRequest *request) { handleBLEScaleScan(request); });
     server.on("/api/scales/info", [this](AsyncWebServerRequest *request) { handleBLEScaleInfo(request); });
     server.on("/api/scales/forget", [this](AsyncWebServerRequest *request) { handleBLEScaleForget(request); });
+
+    // --- M1: Pump Calibration Wizard API ---
+    server.on("/api/calibration/pump/status", HTTP_GET, [this](AsyncWebServerRequest *request) {
+        std::lock_guard<std::recursive_mutex> guard(controller->getProcessLock());
+        CalibrationManager &calMgr = controller->getCalibrationManager();
+        AsyncResponseStream *response = request->beginResponseStream("application/json");
+        JsonDocument doc(&psramAllocator);
+        doc["state"] = calMgr.getStateString();
+        doc["state_code"] = static_cast<int>(calMgr.getState());
+        doc["step_index"] = calMgr.getCurrentPointIndex();
+        doc["progress"] = calMgr.getStepProgressPercent(millis());
+        doc["last_error"] = calMgr.getLastError();
+        doc["calibrated"] = calMgr.isCalibrated();
+        
+        JsonArray qArr = doc["q_max"].to<JsonArray>();
+        JsonArray pArr = doc["p_stall"].to<JsonArray>();
+        JsonArray dArr = doc["duty_points"].to<JsonArray>();
+        const auto &cal = calMgr.getCalibratedData();
+        for (size_t i = 0; i < PumpCalibrationData::NUM_POINTS; ++i) {
+            qArr.add(cal.qMaxPoints[i]);
+            pArr.add(cal.pStallPoints[i]);
+            dArr.add(cal.dutyPoints[i]);
+        }
+        doc["compliance"] = cal.systemCompliance;
+        doc["thermal_fade"] = cal.thermalFadeFactor;
+        serializeJson(doc, *response);
+        request->send(response);
+    });
+
+    server.on("/api/calibration/pump/start", HTTP_ANY, [this](AsyncWebServerRequest *request) {
+        std::lock_guard<std::recursive_mutex> guard(controller->getProcessLock());
+        CalibrationManager &calMgr = controller->getCalibrationManager();
+        const bool ok = !controller->isActive() && calMgr.startCalibration();
+        AsyncResponseStream *response = request->beginResponseStream("application/json");
+        JsonDocument doc(&psramAllocator);
+        doc["ok"] = ok;
+        doc["state"] = calMgr.getStateString();
+        serializeJson(doc, *response);
+        request->send(response);
+    });
+
+    server.on("/api/calibration/pump/confirm_basket", HTTP_ANY, [this](AsyncWebServerRequest *request) {
+        std::lock_guard<std::recursive_mutex> guard(controller->getProcessLock());
+        CalibrationManager &calMgr = controller->getCalibrationManager();
+        const bool ok = calMgr.confirmBlindBasket();
+        AsyncResponseStream *response = request->beginResponseStream("application/json");
+        JsonDocument doc(&psramAllocator);
+        doc["ok"] = ok;
+        doc["state"] = calMgr.getStateString();
+        serializeJson(doc, *response);
+        request->send(response);
+    });
+
+    server.on("/api/calibration/pump/abort", HTTP_ANY, [this](AsyncWebServerRequest *request) {
+        std::lock_guard<std::recursive_mutex> guard(controller->getProcessLock());
+        CalibrationManager &calMgr = controller->getCalibrationManager();
+        calMgr.abortCalibration("User aborted via Web UI");
+        AsyncResponseStream *response = request->beginResponseStream("application/json");
+        JsonDocument doc(&psramAllocator);
+        doc["ok"] = true;
+        doc["state"] = calMgr.getStateString();
+        serializeJson(doc, *response);
+        request->send(response);
+    });
+
+    server.on("/api/calibration/pump/reset", HTTP_ANY, [this](AsyncWebServerRequest *request) {
+        std::lock_guard<std::recursive_mutex> guard(controller->getProcessLock());
+        CalibrationManager &calMgr = controller->getCalibrationManager();
+        calMgr.resetToFactoryDefaults();
+        AsyncResponseStream *response = request->beginResponseStream("application/json");
+        JsonDocument doc(&psramAllocator);
+        doc["ok"] = true;
+        doc["state"] = calMgr.getStateString();
+        serializeJson(doc, *response);
+        request->send(response);
+    });
     FS *fs = &LittleFS;
     if (controller->isSDCard()) {
         fs = &SD_MMC;

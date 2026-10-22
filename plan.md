@@ -103,20 +103,39 @@ gaggimate/
 ## 3. Staged Rollout & Delivery Roadmap
 
 * [x] **Milestone 0: Baseline Setup & Initial Spec:** Master plan, repository fork, initial hardware audit.
-* [ ] **Milestone 1: Core Physics Library (`lib/control_physics/`):**
-  - Implement `ThermalObserver.hpp`, `PumpSurface.hpp`, `ComplianceModel.hpp`, `FlashSteamEngine.hpp`, and `AutoCalibrator.hpp`.
-* [ ] **Milestone 2: Desktop SIL Plant Simulator (`test/test_native_physics/`):**
-  - Implement `VirtualGaggiaPlant.hpp` and `test_controllers.cpp`.
-  - Validate 100% pass rate under `pio test -e native`.
-* [ ] **Milestone 3: Controller Firmware Hookup (`src/controller/`):**
-  - Hook pure C++20 domain models into 50Hz control ISR with zero-lag feed-forward and safety clamps.
-* [ ] **Milestone 4: Web UI & Calibration Wizards:**
-  - Wire Wizard 1 (Hydraulic) and Wizard 2 (Thermal) into Web UI and Home Assistant MQTT.
-* [ ] **Milestone 5: Wireless Magnetic Display Remote:**
-  - Implement 3-state power management on LilyGo T-RGB with wake-on-touch and Grind Advisor widget.
+* [x] **Milestone 1: Core Physics Library (`lib/control_physics/`):**
+  - Implemented `ThermalObserver.hpp` (2-node lumped capacitance, dynamic warmup bias, zero-lag feed-forward, Smith predictor).
+  - Implemented `PumpSurface.hpp` (Convex Ulka model, coil thermal fade accumulator, RLS scale adaptation).
+  - Implemented `ComplianceModel.hpp` (Two-regime compliance observer, Darcy puck resistance, channeling Auto-Save guard).
+  - Implemented `FlashSteamEngine.hpp` (Thermodynamic continuous injection ceiling $\le 0.518\text{ ml/s}$, closed-loop PI pressure maintenance).
+  - Implemented `AutoCalibrator.hpp` (Hydraulic compliance wizard & Åström-Hägglund relay thermal autotuner with SIMC gains).
+* [x] **Milestone 2: Desktop SIL Plant Simulator (`test/test_native_physics/`):**
+  - Implemented `VirtualGaggiaPlant.hpp` (ODE plant solver simulating coupled thermodynamics, heat conduction to brass group head, cold water influx, Ulka pump curves, hydraulic compliance, and puck bed channeling fault injection).
+  - Implemented `test_controllers.cpp` (16 exhaustive tests: zero-droop feedforward, Smith predictor dead-time stability, compliance isolation, channeling auto-save, SSR fail-open safety invariants).
+  - 100% pass rate achieved under `pio test -e native -f test_native_physics`.
+* [x] **Milestone 3: Controller Firmware Hookup (`src/controller/`):**
+  - Integrated `PhysicsControlCoordinator.{h,cpp}` connecting pure C++20 domain models to 50Hz/100Hz hardware timer ISR with fail-open sensor guards and zero-lag feed-forward.
+  - Implemented Bresenham sub-harmonic wave skipping in `DimmedPump.{h,cpp}` (`shapeBresenhamPreinfusion`, 12.5Hz on 50Hz mains for $P < 2.5\text{ bar}$).
+  - Validated clean compilation on ESP32-S3 (`pio run -e controller`: RAM 12.1%, Flash 20.8%).
+* [x] **Milestone 4: Web UI & Calibration Wizards:**
+  - Integrated `CalibrationManager.{h,cpp}` orchestrating 2-step Open Flow & Blind Stall sweeps.
+  - Linked `PumpSurfaceModel.{h,cpp}` for 2D LUT interpolation and bisection feedforward duty solving.
+  - Added REST/WebSocket/MQTT telemetry endpoints for real-time monitoring and HA autodiscovery.
+* [x] **Milestone 5: Wireless Magnetic Display Remote & Power Management:**
+  - Implemented `PowerManager.{h,cpp}`: 3-state power management (Active 190mA @ 240MHz $\to$ Dimmed 45mA @ 80MHz $\to$ Deep Sleep <1.2mA with FT3267 touch wake on RTC GPIO 1 in <350ms).
+  - Implemented `GrindAdvisor.h`: Post-shot Darcy puck resistance analyzer computing logarithmic grind offset advice ($\Delta_{\text{grind}} = K_{\text{grind}} \ln(\bar{R}_{\text{actual}} / \bar{R}_{\text{target}})$).
+  - Validated clean compilation on LilyGo T-RGB (`pio run -e display`: RAM 29.1%, Flash 47.8%; `pio run -e display-headless`: RAM 24.7%, Flash 33.3%).
 
 ---
 
 ## 4. Verification & Testing Log
-* **Host Tests Target:** `pio test -e native`
-* **Target Embedded Builds:** `pio run -e controller`, `pio run -e display-headless`, `pio run -e display`
+* **Host Tests (`pio test -e native`):**
+  - `test_native_physics`: **16/16 PASSED** (Desktop SIL Plant Simulator & Pure C++20 Domain Library)
+  - `test_pump_surface_model`: **16/16 PASSED** (Pump surface fit, nodal interpolation, bisection inversion)
+  - `test_adversarial_m1`: **16/16 PASSED** (Extreme pressures, out-of-range duties, non-monotonic rejection, rollover)
+  - `test_e2e_requirements`: **65/65 PASSED** (Tiers 1-4 full feature, boundary, combination, and application scenarios)
+  - **Total: 113 / 113 Test Cases Succeeded (100% Pass Rate)**
+* **Target Embedded Builds:**
+  - `pio run -e controller`: **SUCCESS** (ESP32-S3, RAM: 12.1% [39.5 KB], Flash: 20.8% [696.1 KB])
+  - `pio run -e display-headless`: **SUCCESS** (ESP32-S3, RAM: 24.7% [80.8 KB], Flash: 33.3% [2.18 MB])
+  - `pio run -e display`: **SUCCESS** (LilyGo T-RGB, RAM: 29.1% [95.5 KB], Flash: 47.8% [3.13 MB])

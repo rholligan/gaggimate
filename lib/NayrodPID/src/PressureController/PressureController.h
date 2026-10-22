@@ -5,6 +5,7 @@
 static constexpr float M_PI = 3.14159265358979323846f;
 #endif
 
+#include "PumpSurfaceModel.h"
 #include "SimpleKalmanFilter/SimpleKalmanFilter.h"
 #include <algorithm>
 #include <cmath> // std::fmax (getCoffeeOutputEstimate())
@@ -38,6 +39,26 @@ class PressureController {
     float getPuckResistance() { return _puckResistance; }
 
     void setDeadVolume(float deadVol) { _puckSaturatedVolume = deadVol; };
+
+    // PumpSurfaceModel integration
+    void setPumpSurfaceModel(const PumpSurfaceModel &model) {
+        _surfaceModel = model;
+        _useSurfaceModel = true;
+    }
+    const PumpSurfaceModel &getPumpSurfaceModel() const { return _surfaceModel; }
+    PumpSurfaceModel &getPumpSurfaceModel() { return _surfaceModel; }
+
+    void setPumpCalibration(const PumpCalibrationData &cal) {
+        _surfaceModel.setCalibration(cal);
+        _useSurfaceModel = true;
+    }
+    const PumpCalibrationData &getPumpCalibration() const { return _surfaceModel.getCalibration(); }
+
+    bool isPumpSurfaceModelEnabled() const { return _useSurfaceModel; }
+    void setPumpSurfaceModelEnabled(bool enabled) { _useSurfaceModel = enabled; }
+
+    void setThermalFadeScalar(float scalar) { _thermalFadeScalar = std::clamp(scalar, 0.0f, 1.0f); }
+    float getThermalFadeScalar() const { return _thermalFadeScalar; }
 
   private:
     float getPumpDutyCycleForPressure();
@@ -109,6 +130,11 @@ class PressureController {
     int _puckCounter = 0;
     float exportPumpFlowRate = 0.0f; // To disociate the exported value from the internal because of filtering (cosmetic) purpose
     SimpleKalmanFilter *_pressureKalmanFilter;
+
+    // === Calibrated physical surface model ===
+    PumpSurfaceModel _surfaceModel;
+    bool _useSurfaceModel = true;
+    float _thermalFadeScalar = 1.0f;
 };
 
 #endif // PRESSURE_CONTROLLER_H

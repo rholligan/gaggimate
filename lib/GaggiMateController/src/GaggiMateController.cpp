@@ -78,7 +78,12 @@ void GaggiMateController::setup() {
         pump = new SimplePump(_config.pumpPin, _config.pumpOn, _config.capabilites.ssrPump ? 1000.0f : 5000.0f);
     }
     brewBtn = new DigitalInput(_config.brewButtonPin, [this](const bool state) { _comms.sendButtonState(0, state); });
-    steamBtn = new DigitalInput(_config.steamButtonPin, [this](const bool state) { _comms.sendButtonState(1, state); });
+    steamBtn = new DigitalInput(_config.steamButtonPin, [this](const bool state) {
+        _comms.sendButtonState(1, state);
+        if (physicsCoordinator != nullptr) {
+            physicsCoordinator->setSteamMode(state);
+        }
+    });
     if (_config.waterButtonPin != 0) {
         waterBtn = new DigitalInput(_config.waterButtonPin, [this](const bool state) { _comms.sendButtonState(2, state); });
     }
@@ -187,6 +192,16 @@ void GaggiMateController::setup() {
         heater->setThermalFeedforward(pumpFlowPtr, 23.0f, valveStatusPtr);
         heater->setFeedforwardScale(0.0f);
     }
+    if (_config.capabilites.pressure && _config.capabilites.dimming) {
+        auto dimmedPump = static_cast<DimmedPump *>(pump);
+        physicsCoordinator = new PhysicsControlCoordinator(
+            this->brewTemperature,
+            this->pressureSensor,
+            dimmedPump,
+            this->valve,
+            _config.heaterPin);
+        physicsCoordinator->setup();
+    }
     // Initialize last ping time
     lastPingTime = millis();
 
@@ -206,7 +221,11 @@ void GaggiMateController::setup() {
             return;
         }
         if (mode == BoilerControlMode::Temperature) {
-            target->setSetpoint(setpoint);
+            if (physicsCoordinator != nullptr && index == 0) {
+                physicsCoordinator->setBrewTarget(setpoint);
+            } else {
+                target->setSetpoint(setpoint);
+            }
         } else {
             // Pressure-regulated boiler not supported by this hardware yet.
             ESP_LOGW(LOG_TAG, "Boiler pressure mode requested but unsupported");
@@ -222,6 +241,9 @@ void GaggiMateController::setup() {
             return;
         }
         if (mode == PumpControlMode::Power) {
+            if (physicsCoordinator != nullptr) {
+                physicsCoordinator->setManualPumpPower(power);
+            }
             this->pump->setPower(power);
             if (power == 0.0f) {
                 if (gearpumpAddon != nullptr) {
@@ -236,8 +258,14 @@ void GaggiMateController::setup() {
         auto dimmedPump = static_cast<DimmedPump *>(pump);
         if (mode == PumpControlMode::Pressure) {
             dimmedPump->setPressureTarget(pressure, flow);
+            if (physicsCoordinator != nullptr) {
+                physicsCoordinator->setPressureTarget(pressure, flow);
+            }
         } else { // PumpControlMode::Flow
             dimmedPump->setFlowTarget(flow, pressure);
+            if (physicsCoordinator != nullptr) {
+                physicsCoordinator->setFlowTarget(flow, pressure);
+            }
         }
     });
     // Binary outputs: index 0 = brew valve, index 1 = alt relay,
@@ -272,6 +300,9 @@ void GaggiMateController::setup() {
         this->valve->set(open);
         if (_config.capabilites.dimming) {
             static_cast<DimmedPump *>(pump)->setValveState(open);
+        }
+        if (physicsCoordinator != nullptr) {
+            physicsCoordinator->setValveState(open);
         }
     });
     // Heaters stay off until the display delivers these; coordination is applied before the gains enable heating.
@@ -317,7 +348,11 @@ void GaggiMateController::setup() {
         if (errorState != ERROR_CODE_NONE) { // don't re-engage the heater while faulted
             return;
         }
-        this->heater->autotune(static_cast<int>(testTimeSec), static_cast<int>(windowSize), static_cast<int>(heaterWattage));
+        if (physicsCoordinator != nullptr) {
+            physicsCoordinator->startThermalAutotune(88.0f);
+        } else {
+            this->heater->autotune(static_cast<int>(testTimeSec), static_cast<int>(windowSize), static_cast<int>(heaterWattage));
+        }
     });
     _comms.onTare([this]() {
         if (hardwareScale != nullptr && hardwareScale->isAvailable()) {
@@ -352,6 +387,11 @@ void GaggiMateController::loop() {
 
     if (lastPingTime < now && (now - lastPingTime) / 1000 > PING_TIMEOUT_SECONDS) {
         handlePingTimeout();
+    }
+    if (physicsCoordinator != nullptr && physicsCoordinator->isEmergencyTripped()) {
+        if (errorState == ERROR_CODE_NONE) {
+            thermalRunawayShutdown();
+        }
     }
     sendSensorData();
     if (_config.capabilites.ledControls && now - lastLedHealthCheck >= LED_HEALTH_CHECK_INTERVAL_MS) {
@@ -432,6 +472,9 @@ void GaggiMateController::handlePing() {
 
 void GaggiMateController::handlePingTimeout() {
     // Turn off the heater and pump as a safety measure
+    if (physicsCoordinator != nullptr) {
+        physicsCoordinator->stop();
+    }
     this->heater->stop();
     this->pump->setPower(0);
     this->valve->set(false);
@@ -460,6 +503,9 @@ void GaggiMateController::handlePingTimeout() {
 void GaggiMateController::thermalRunawayShutdown() {
     ESP_LOGE(LOG_TAG, "Thermal runaway detected! Turning off heater and pump!\n");
     // Turn off the heater and pump immediately
+    if (physicsCoordinator != nullptr) {
+        physicsCoordinator->stop();
+    }
     this->heater->stop();
     this->pump->setPower(0);
     this->valve->set(false);
@@ -476,7 +522,7 @@ void GaggiMateController::thermalRunawayShutdown() {
 
 void GaggiMateController::sendSensorData() {
     const float pumpPower = *pump->getPumpPowerPtr();
-    const float heaterPower = heater ? heater->getDutyCycle() : 0.0f;
+    const float heaterPower = physicsCoordinator ? physicsCoordinator->getSsrDuty() * 100.0f : (heater ? heater->getDutyCycle() : 0.0f);
     float puckFlow = 0.0f;
     float pumpFlow = 0.0f;
     float puckResistance = 0.0f;
@@ -486,7 +532,18 @@ void GaggiMateController::sendSensorData() {
     size_t n = 0;
     if (_config.capabilites.pressure) {
         pressure = pressureSensor->getPressure();
-        if (_config.capabilites.dimming) {
+        if (physicsCoordinator != nullptr) {
+            puckFlow = physicsCoordinator->getPuckFlow();
+            pumpFlow = physicsCoordinator->getPumpFlow();
+            puckResistance = physicsCoordinator->getPuckResistance();
+            if (_config.capabilites.dimming) {
+                auto dimmedPump = static_cast<DimmedPump *>(pump);
+                waterPumped = dimmedPump->getPumpedWater();
+                if (this->valve->getState()) {
+                    batch[n++] = _comms.buildVolumetricMeasurement(dimmedPump->getCoffeeVolume());
+                }
+            }
+        } else if (_config.capabilites.dimming) {
             auto dimmedPump = static_cast<DimmedPump *>(pump);
             puckFlow = dimmedPump->getPuckFlow();
             pumpFlow = dimmedPump->getPumpFlow();

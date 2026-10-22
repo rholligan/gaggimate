@@ -116,7 +116,7 @@ class ThermalObserver {
      */
     float update(float T_sens, float targetTemp, float flowRateMlS, bool isBrewing = false) {
         // --- 1. HARDWARE SAFETY INVARIANTS ---
-        if (std::isnan(T_sens) || std::isinf(T_sens) || T_sens > kOverheatCutoff) {
+        if (emergencyTripped_ || std::isnan(T_sens) || std::isinf(T_sens) || T_sens > kOverheatCutoff || T_sens < 0.0f) {
             emergencyTripped_ = true;
             lastDuty_ = 0.0f;
             return 0.0f;

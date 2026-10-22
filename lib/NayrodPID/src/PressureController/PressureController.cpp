@@ -83,6 +83,9 @@ void PressureController::update(ControlMode mode, bool freshPressure, float samp
 }
 
 float PressureController::pumpFlowModel(float alpha) const {
+    if (_useSurfaceModel) {
+        return _surfaceModel.getFlow(_filteredPressureSensor, alpha, _thermalFadeScalar);
+    }
     // Positive-displacement model: net = duty * Q_geo - slip (affine in duty).
     // With slip = 0 this reduces to the previous proportional model.
     const float duty = alpha / 100.0f;
@@ -116,6 +119,9 @@ float PressureController::getPumpDutyCycleForFlowRate() const {
     if (*_rawFlowSetpoint <= 0.0f) {
         return 0.0f;
     }
+    if (_useSurfaceModel) {
+        return _surfaceModel.getFeedforwardDuty(*_rawFlowSetpoint, _filteredPressureSensor, _thermalFadeScalar);
+    }
     const float geometricFlow = getGeometricFlow();
     if (geometricFlow <= 0.0f) {
         return 0.0f;
@@ -126,6 +132,7 @@ float PressureController::getPumpDutyCycleForFlowRate() const {
 }
 
 void PressureController::setPumpFlowCoeff(float oneBarFlow, float nineBarFlow) {
+    _useSurfaceModel = false;
     // Set the affine pump flow model coefficients based on flow measurement at 1 bar and 9 bar
     _pumpFlowCoefficients[0] = 0.0f;
     _pumpFlowCoefficients[1] = 0.0f;
@@ -134,6 +141,7 @@ void PressureController::setPumpFlowCoeff(float oneBarFlow, float nineBarFlow) {
 }
 
 void PressureController::setPumpFlowPolyCoeffs(float a, float b, float c, float d) {
+    _useSurfaceModel = false;
     _pumpFlowCoefficients[0] = a;
     _pumpFlowCoefficients[1] = b;
     _pumpFlowCoefficients[2] = c;
@@ -299,7 +307,7 @@ float PressureController::getPumpDutyCycleForPressure() {
 
     // Plant-gain inversion: Qa is the duty->flow slope (d Q_in / d duty), which is the
     // geometric flow Q_geo under the affine model. Reduces to the full-drive curve when slip = 0.
-    float Qa = getGeometricFlow();
+    float Qa = _useSurfaceModel ? std::max(0.1f, _surfaceModel.getMaxFlow(100.0f, _thermalFadeScalar)) : getGeometricFlow();
     Qa = fmaxf(Qa, 1e-3f);
     float Ceq = _systemCompliance;
     float K = _commutationGain / denominator * Qa / Ceq;

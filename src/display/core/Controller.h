@@ -5,6 +5,7 @@
 #include "PluginManager.h"
 #include "Settings.h"
 #include "SystemInfo.h"
+#include "CalibrationManager.h"
 #include <WiFi.h>
 #include <atomic>
 #include <display/core/ButtonHandler.h>
@@ -13,7 +14,9 @@
 #include <display/core/process/Process.h>
 #include <mutex>
 #include <vector>
+#include <display/core/GrindAdvisor.h>
 #ifndef GAGGIMATE_HEADLESS
+#include <display/core/PowerManager.h>
 #include <display/drivers/Driver.h>
 #include <display/ui/default/DefaultUI.h>
 #endif
@@ -91,8 +94,12 @@ class Controller {
     std::recursive_mutex &getProcessLock() const { return processMutex; }
     Settings &getSettings() { return settings; }
     ProfileManager *getProfileManager() { return profileManager; }
+    CalibrationManager &getCalibrationManager() { return calibrationManager; }
+    GrindAdvisor &getGrindAdvisor() { return grindAdvisor; }
+    const GrindAdvisor &getGrindAdvisor() const { return grindAdvisor; }
 #ifndef GAGGIMATE_HEADLESS
     DefaultUI *getUI() const { return ui; }
+    PowerManager *getPowerManager() const { return powerManager; }
     bool areGaugeSetpointsInside() const { return gaugeSetpointsInside; }
 #endif
     bool isErrorState() const { return error > 0; }
@@ -133,6 +140,8 @@ class Controller {
     String getActiveScaleSourceName() const;
     bool isBluetoothScaleHealthy() const;
     bool isHardwareScaleHealthy() const;
+    float getScaleMass() const { return currentScaleMass.load(); }
+    bool isScaleConnected() const;
     float getHardwareScaleCell1Weight() const { return hardwareScaleCell1Weight.load(); }
     float getHardwareScaleCell2Weight() const { return hardwareScaleCell2Weight.load(); }
     bool isHardwareScaleCell1Valid() const { return hardwareScaleCell1Valid.load(); }
@@ -213,8 +222,10 @@ class Controller {
 #ifndef GAGGIMATE_HEADLESS
     DefaultUI *ui = nullptr;
     Driver *driver = nullptr;
+    PowerManager *powerManager = nullptr;
     bool gaugeSetpointsInside = false;
 #endif
+    GrindAdvisor grindAdvisor;
     GaggiMateClient comms;
     ButtonHandler buttons;
     hw_timer_t *timer = nullptr;
@@ -222,6 +233,7 @@ class Controller {
     PluginManager *pluginManager{};
     ProfileManager *profileManager{};
     WarningManager warnings;
+    CalibrationManager calibrationManager;
 
     int mode = MODE_BREW;
     float currentTemp = 0.0f;
@@ -318,6 +330,7 @@ class Controller {
     std::atomic<float> hardwareScaleCell2Weight{0.0f};
     std::atomic<bool> hardwareScaleCell1Valid{false};
     std::atomic<bool> hardwareScaleCell2Valid{false};
+    std::atomic<float> currentScaleMass{0.0f};
     static const unsigned long BLUETOOTH_GRACE_PERIOD_MS = 1500; // 1.5 second grace period
     static const unsigned long HARDWARE_GRACE_PERIOD_MS = 1500;
     static const unsigned long CONTROLLER_WAITING_TIMEOUT_MS = 10000;

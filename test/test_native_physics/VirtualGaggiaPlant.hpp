@@ -92,10 +92,8 @@ class VirtualGaggiaPlant {
         lastPuckFlow_ = Q_puck;
 
         // --- 2. THERMODYNAMICS ODE ---
-        // Heater transport dead time (heater power applied to water core with delay)
-        heaterDelayBuffer_[heaterDelayIndex_] = D_ssr * kPmax;
-        heaterDelayIndex_ = (heaterDelayIndex_ + 1) % kDelaySteps;
-        const float delayedHeaterPower = heaterDelayBuffer_[heaterDelayIndex_];
+        // Direct heater power coupling to boiler aluminum casting & water core
+        const float heaterPower = D_ssr * kPmax;
 
         // Cold water influx cooling
         const float m_dot = (valveOpen ? Q_puck : 0.0f) * 1e-3f; // kg/s
@@ -108,7 +106,7 @@ class VirtualGaggiaPlant {
         const float Q_water_group = m_dot * kCpWater * kGammaG * (Tb_ - Tg_);
 
         // Boiler and group head differential equations
-        const float dTb_dt = (delayedHeaterPower - Q_water_inlet - Q_bg - Q_b_amb) / kCb;
+        const float dTb_dt = (heaterPower - Q_water_inlet - Q_bg - Q_b_amb) / kCb;
         const float dTg_dt = (Q_bg + Q_water_group - Q_g_amb) / kCg;
 
         Tb_ += dTb_dt * dt_;

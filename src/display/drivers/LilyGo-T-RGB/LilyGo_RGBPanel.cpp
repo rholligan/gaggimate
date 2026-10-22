@@ -11,6 +11,7 @@
 #include "utilities.h"
 #include <display/drivers/common/RGBPanelInit.h>
 #include <esp_adc_cal.h>
+#include <esp_sleep.h>
 
 static void TouchDrvDigitalWrite(uint32_t gpio, uint8_t level);
 static int TouchDrvDigitalRead(uint32_t gpio);
@@ -20,7 +21,7 @@ static const lcd_init_cmd_t *_init_cmd = nullptr;
 
 LilyGo_RGBPanel::LilyGo_RGBPanel(/* args */)
     : _brightness(0), _panelDrv(nullptr), _touchDrv(nullptr), _order(LILYGO_T_RGB_ORDER_RGB), _has_init(false),
-      _wakeupMethod(LILYGO_T_RGB_WAKEUP_FORM_BUTTON), _sleepTimeUs(0), _touchType(LILYGO_T_RGB_TOUCH_UNKNOWN) {}
+      _wakeupMethod(LILYGO_T_RGB_WAKEUP_FORM_TOUCH), _sleepTimeUs(0), _touchType(LILYGO_T_RGB_TOUCH_UNKNOWN) {}
 
 LilyGo_RGBPanel::~LilyGo_RGBPanel() {
     if (_panelDrv) {
@@ -184,11 +185,17 @@ void LilyGo_RGBPanel::enableTimerWakeup(uint64_t time_in_us) {
 // The sleep method tested CST820 and GT911, and the FTxxxx series should also
 // be usable.
 void LilyGo_RGBPanel::sleep() {
-    // turn off blacklight
-    for (int i = _brightness; i >= 0; --i) {
-        setBrightness(i);
-        delay(30);
-    }
+    // turn off backlight
+    setBrightness(0);
+
+    // Put ST7701S panel into Sleep In mode
+    Wire.setClock(1000000UL);
+    extension.beginSPI(mosi, -1, sclk, cs);
+    writeCommand(0x28); // Display Off
+    delay(10);
+    writeCommand(0x10); // Sleep In
+    delay(10);
+    Wire.setClock(400000UL);
 
     if (LILYGO_T_RGB_WAKEUP_FORM_TOUCH != _wakeupMethod) {
         if (_touchDrv) {
@@ -208,32 +215,33 @@ void LilyGo_RGBPanel::sleep() {
         int16_t y_array[1];
         uint8_t get_point = 1;
         pinMode(BOARD_TOUCH_IRQ, INPUT);
-        // Wait for your finger to be lifted from the screen
-        while (!digitalRead(BOARD_TOUCH_IRQ)) {
-            delay(100);
+        // Wait for finger to be lifted from the screen
+        int retries = 0;
+        while (!digitalRead(BOARD_TOUCH_IRQ) && retries++ < 50) {
+            delay(10);
             // Clear touch buffer
             getPoint(x_array, y_array, get_point);
         }
-        // Wait for the interrupt level to stabilize
-        delay(2000);
-        // Set touch irq wakeup
-        esp_sleep_enable_ext1_wakeup(_BV(BOARD_TOUCH_IRQ), ESP_EXT1_WAKEUP_ANY_LOW);
+        // Removed 2000ms blocking delay
+        // Configure wake-on-touch via FT3267 TP_INT on GPIO 1 (RTC GPIO 1) using esp_sleep_enable_ext0_wakeup
+        esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(BOARD_TOUCH_IRQ), 0);
     } break;
     case LILYGO_T_RGB_WAKEUP_FORM_BUTTON:
-        esp_sleep_enable_ext1_wakeup(_BV(0), ESP_EXT1_WAKEUP_ANY_LOW);
+        esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0);
         break;
     case LILYGO_T_RGB_WAKEUP_FORM_TIMER:
         esp_sleep_enable_timer_wakeup(_sleepTimeUs);
         break;
     default:
-        // Default GPIO0 Wakeup
-        esp_sleep_enable_ext1_wakeup(_BV(0), ESP_EXT1_WAKEUP_ANY_LOW);
+        // Default GPIO 1 Wakeup
+        esp_sleep_enable_ext0_wakeup(static_cast<gpio_num_t>(BOARD_TOUCH_IRQ), 0);
         break;
     }
 
     if (_panelDrv) {
         esp_lcd_panel_disp_off(_panelDrv, true);
         esp_lcd_panel_del(_panelDrv);
+        _panelDrv = nullptr;
     }
 
     Wire.end();
@@ -252,7 +260,14 @@ void LilyGo_RGBPanel::sleep() {
     esp_deep_sleep_start();
 }
 
-void LilyGo_RGBPanel::wakeup() {}
+void LilyGo_RGBPanel::wakeup() {
+    Wire.setClock(1000000UL);
+    extension.beginSPI(mosi, -1, sclk, cs);
+    writeCommand(0x11); // Sleep Out
+    delay(120);
+    writeCommand(0x29); // Display On
+    Wire.setClock(400000UL);
+}
 
 uint16_t LilyGo_RGBPanel::width() { return BOARD_TFT_WIDTH; }
 
@@ -308,37 +323,42 @@ void LilyGo_RGBPanel::initBUS() {
         return;
     }
 
-    extension.pinMode(reset, OUTPUT);
-    extension.digitalWrite(reset, LOW);
-    delay(20);
-    extension.digitalWrite(reset, HIGH);
-    delay(10);
+    bool isExt0Wake = (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0);
 
-    Wire.setClock(1000000UL);
-    // uint32_t start = millis();
+    if (isExt0Wake) {
+        // Fast wake path: ST7701S registers were retained in Sleep In mode during deep sleep.
+        // Skip 1833ms bitbang cold init by issuing only Sleep Out (0x11) and Display On (0x29).
+        Wire.setClock(1000000UL);
+        extension.beginSPI(mosi, -1, sclk, cs);
+        writeCommand(0x11); // Sleep Out
+        delay(120);         // ST7701S recovery time
+        writeCommand(0x29); // Display On
+        Wire.setClock(400000UL);
+    } else {
+        // Cold boot path: full reset and bitbang initialization
+        extension.pinMode(reset, OUTPUT);
+        extension.digitalWrite(reset, LOW);
+        delay(20);
+        extension.digitalWrite(reset, HIGH);
+        delay(10);
 
-    extension.beginSPI(mosi, -1, sclk, cs);
+        Wire.setClock(1000000UL);
 
-    int i = 0;
-    while (_init_cmd[i].databytes != 0xff) {
-        writeCommand(_init_cmd[i].cmd);
-        writeData(_init_cmd[i].data, _init_cmd[i].databytes & 0x1F);
-        if (_init_cmd[i].databytes & 0x80) {
-            delay(100);
+        extension.beginSPI(mosi, -1, sclk, cs);
+
+        int i = 0;
+        while (_init_cmd[i].databytes != 0xff) {
+            writeCommand(_init_cmd[i].cmd);
+            writeData(_init_cmd[i].data, _init_cmd[i].databytes & 0x1F);
+            if (_init_cmd[i].databytes & 0x80) {
+                delay(100);
+            }
+            i++;
         }
-        i++;
+
+        // Reduce to standard speed, touch does not support access greater than 400KHZ speed
+        Wire.setClock(400000UL);
     }
-
-    // uint32_t end = millis();
-
-    // Serial.printf("Initialization took %u milliseconds\n", end - start);
-
-    // Uses 400k I2C speed : Initialization took about 6229 milliseconds
-    // Uses 1M   I2C speed : Initialization took about 1833 milliseconds
-
-    // Reduce to standard speed, touch does not support access greater than
-    // 400KHZ speed
-    Wire.setClock(400000UL);
 
     const int bus_rbg_order[SOC_LCD_RGB_DATA_WIDTH] = {
         // BOARD_TFT_DATA12,    //LSB

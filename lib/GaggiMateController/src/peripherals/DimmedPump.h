@@ -1,6 +1,16 @@
 #ifndef DIMMEDPUMP_H
 #define DIMMEDPUMP_H
+#if __has_include("PSM.h")
 #include "PSM.h"
+#else
+class PSM {
+  public:
+    PSM(unsigned char, unsigned char, unsigned int, int = 0, unsigned char = 1, unsigned char = 0) {}
+    void set(unsigned int) {}
+    unsigned int cps() { return 50; }
+    void setDivider(unsigned char) {}
+};
+#endif
 #include "PressureController/PressureController.h"
 #include "PressureSensor.h"
 #include "Pump.h"
@@ -9,6 +19,13 @@
 class DimmedPump : public Pump {
   public:
     enum class ControlMode { POWER, PRESSURE, FLOW };
+
+    static constexpr float PREINFUSION_PRESSURE_BAR = 2.5f;
+    static constexpr float PREINFUSION_TRANSITION_WINDOW = 0.5f; // 2.5 to 3.0 bar
+    static constexpr float PREINFUSION_DIVIDER = 4.0f;           // N_skip = 4 -> 12.5 Hz on 50 Hz mains
+    static constexpr uint8_t PREINFUSION_MIN_IDLE_CROSSINGS = 2;
+
+    static float shapeBresenhamPreinfusion(float duty, float pressure);
 
     DimmedPump(uint8_t ssr_pin, uint8_t sense_pin, PressureSensor *pressureSensor, PressureControlRate controlRate);
     ~DimmedPump() = default;
@@ -24,9 +41,11 @@ class DimmedPump : public Pump {
     float getPressureTarget() { return _ctrlPressure; }
     float getFlowTarget() { return _ctrlFlow; }
     float *getPumpPowerPtr() override { return &_power; } // For external pump control
+    float getPowerTarget() const override { return _power; }
     float *getPumpFlowPtr() { return &_currentFlow; }     // For thermal feedforward
     float getPumpedWater() { return _pumpedWater; }
     int *getValveStatusPtr() { return &_valveStatus; } // For thermal feedforward valve state
+    bool isPreinfusionActive() const { return _currentPressure < PREINFUSION_PRESSURE_BAR && _power > 0.0f; }
     void tare();
 
     void setFlowTarget(float targetFlow, float pressureLimit);

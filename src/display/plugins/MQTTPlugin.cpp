@@ -182,5 +182,35 @@ void MQTTPlugin::setup(Controller *controller, PluginManager *pluginManager) {
     });
     pluginManager->on("controller:brew:start", [this](Event const &) { publishBrewState("brewing"); });
 
-    pluginManager->on("controller:brew:end", [this](Event const &) { publishBrewState("not brewing"); });
+    pluginManager->on("controller:brew:end", [this, controller](Event const &) {
+        publishBrewState("not brewing");
+        const auto &rec = controller->getGrindAdvisor().getLastRecommendation();
+        if (rec.isValid) {
+            char json[256];
+            snprintf(json, sizeof(json),
+                     R"({"actual_resistance":%.2f,"target_resistance":%.2f,"delta_steps":%.2f,"advice":"%s"})",
+                     rec.actualResistance, rec.targetResistance, rec.deltaGrindSteps, rec.adviceText.c_str());
+            publish("telemetry/grind_advisor", json);
+            if (client.connected()) {
+                client.publish("gaggimate/telemetry/grind_advisor", json);
+            }
+        }
+    });
+
+    pluginManager->on("controller:grind-advisor:result", [this](Event const &event) {
+        float actual = event.getFloat("actual_resistance");
+        float target = event.getFloat("target_resistance");
+        float delta = event.getFloat("delta_steps");
+        String advice = event.getString("advice");
+
+        char json[256];
+        snprintf(json, sizeof(json),
+                 R"({"actual_resistance":%.2f,"target_resistance":%.2f,"delta_steps":%.2f,"advice":"%s"})",
+                 actual, target, delta, advice.c_str());
+
+        publish("telemetry/grind_advisor", json);
+        if (client.connected()) {
+            client.publish("gaggimate/telemetry/grind_advisor", json);
+        }
+    });
 }

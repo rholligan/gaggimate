@@ -14,6 +14,22 @@ class LilyGoDriver : public Driver {
     bool supportsSDCard() override;
     bool installSDCard() override;
 
+    void sleep() override {
+        panel.enableTouchWakeup();
+        panel.sleep();
+    }
+    void wakeup() override {
+        panel.wakeup();
+    }
+    uint16_t getBatteryVoltage() override {
+        return panel.getBattVoltage();
+    }
+    void setLowPowerFrequency(bool lowPower) override {
+#if !defined(GAGGIMATE_SIM)
+        setCpuFrequencyMhz(lowPower ? 80 : 240);
+#endif
+    }
+
     static LilyGoDriver *getInstance() {
         if (instance == nullptr) {
             instance = new LilyGoDriver();

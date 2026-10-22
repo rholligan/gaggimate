@@ -121,6 +121,7 @@ void Controller::setup() {
     pluginManager->registerPlugin(new AutoWakeupPlugin());
     pluginManager->registerPlugin(new CleaningSchedulePlugin());
     pluginManager->setup(this);
+    calibrationManager.loadFromNVS();
 
     pluginManager->on("profiles:profile:save", [this](Event const &event) {
         String id = event.getString("id");
@@ -240,6 +241,9 @@ void Controller::setupPanel() {
         gaugeSetpointsInside = false;
     }
     driver->init();
+    powerManager = new PowerManager(driver);
+    powerManager->setActiveBrightness(settings.getMainBrightness());
+    powerManager->setup();
     panelPrefs.putUChar("driver", model);
     panelPrefs.end();
 #endif
@@ -296,6 +300,38 @@ void Controller::setupBluetooth() {
     });
     pluginManager->on("ota:update:end", [this](Event const &) { applyConnectionPriority(true); });
     pluginManager->on("history:shot:recorded", [this](Event const &) { comms.tare(); });
+    pluginManager->on("controller:brew:start", [this](Event const &) { grindAdvisor.onShotStart(millis()); });
+    pluginManager->on("brew:start", [this](Event const &) { grindAdvisor.onShotStart(millis()); });
+    pluginManager->on("pump:puck-resistance:change", [this](Event const &event) {
+        if (isBrewActive()) {
+            float rpuck = event.getFloat("value");
+            grindAdvisor.addSample(getCurrentPressure(), getCurrentPuckFlow(), rpuck, millis());
+        }
+    });
+    pluginManager->on("controller:brew:end", [this](Event const &) {
+        auto rec = grindAdvisor.onShotEnd();
+        if (rec.isValid) {
+            Event evt;
+            evt.id = "controller:grind-advisor:result";
+            evt.setFloat("actual_resistance", rec.actualResistance);
+            evt.setFloat("target_resistance", rec.targetResistance);
+            evt.setFloat("delta_steps", rec.deltaGrindSteps);
+            evt.setString("advice", rec.adviceText.c_str());
+            pluginManager->trigger(evt);
+        }
+    });
+    pluginManager->on("brew:end", [this](Event const &) {
+        auto rec = grindAdvisor.onShotEnd();
+        if (rec.isValid) {
+            Event evt;
+            evt.id = "controller:grind-advisor:result";
+            evt.setFloat("actual_resistance", rec.actualResistance);
+            evt.setFloat("target_resistance", rec.targetResistance);
+            evt.setFloat("delta_steps", rec.deltaGrindSteps);
+            evt.setString("advice", rec.adviceText.c_str());
+            pluginManager->trigger(evt);
+        }
+    });
     comms.onSensorData([this](float temp, float temp2, float pressure, float puckFlow, float pumpFlow, float puckResistance,
                               float pumpPower, float heaterPower, float waterPumped) {
         onTempRead(temp);
@@ -570,6 +606,17 @@ void Controller::loop() {
     warnings.loop();
     pluginManager->loop();
     buttons.loop(millis()); // deferred combo presses + long-press timing
+#ifndef GAGGIMATE_HEADLESS
+    if (powerManager != nullptr) {
+        powerManager->loop(isActive(), mode);
+    }
+#endif
+
+    if (calibrationManager.isActive()) {
+        const unsigned long now = millis();
+        calibrationManager.update(now, getCurrentPressure(), getScaleMass(), isScaleConnected());
+        updateControl();
+    }
 
     if (screenReady && !initialized) {
         connect();
@@ -1041,7 +1088,14 @@ void Controller::updateControl() {
     relay.index = 0;
 
     bool handled = false;
-    if (active && systemInfo.capabilities.pressure) {
+    if (calibrationManager.isActive()) {
+        targetPressure = 0.0f;
+        targetFlow = 0.0f;
+        relay.open = calibrationManager.isValveOpenCommand();
+        pump.mode = PumpControlMode::Power;
+        pump.power = calibrationManager.getActiveDutyCommand();
+        handled = true;
+    } else if (active && systemInfo.capabilities.pressure) {
         if (proc->getType() == MODE_STEAM) {
             targetPressure = settings.getSteamPumpCutoff();
             targetFlow = proc->getPumpValue() * 0.1f;
@@ -1142,7 +1196,7 @@ void Controller::activate(bool ignoreWarnings) {
     // Never create a process while startup is incomplete or the controller is
     // absent. The UI can be reached by tapping through the startup screen, and
     // previously its Start action ran against a half-initialized BLE session.
-    if (isActive() || !loaded || !comms.isConnected() || !isReady())
+    if (isActive() || !loaded || !comms.isConnected() || !isReady() || calibrationManager.isActive())
         return;
     // An error-level warning turns the start into a confirmation request; the UIs answer with activate(true).
     if (mode == MODE_BREW && !ignoreWarnings && warnings.hasError()) {
@@ -1294,6 +1348,11 @@ void Controller::deactivateGrind() {
 void Controller::activateStandby() {
     setMode(MODE_STANDBY);
     deactivate();
+#ifndef GAGGIMATE_HEADLESS
+    if (powerManager != nullptr) {
+        powerManager->enterDeepSleep();
+    }
+#endif
 }
 
 void Controller::deactivateStandby() {
@@ -1322,6 +1381,11 @@ void Controller::setMode(int newMode) {
     if (newMode == MODE_STANDBY) {
         waterValveActive = false;
         waterButtonPressed = false;
+#ifndef GAGGIMATE_HEADLESS
+        if (powerManager != nullptr && initialized) {
+            powerManager->enterDeepSleep();
+        }
+#endif
     }
     Event modeEvent = pluginManager->trigger("controller:mode:change", "value", newMode);
     const int previousMode = mode;
@@ -1350,7 +1414,14 @@ void Controller::onPressureRead(float pressure) {
     this->pressure = event.getFloat("value");
 }
 
-void Controller::updateLastAction() { lastAction = millis(); }
+void Controller::updateLastAction() {
+    lastAction = millis();
+#ifndef GAGGIMATE_HEADLESS
+    if (powerManager != nullptr) {
+        powerManager->recordUserActivity();
+    }
+#endif
+}
 
 void Controller::onOTAUpdate() {
     activateStandby();
@@ -1377,8 +1448,10 @@ void Controller::onVolumetricMeasurement(double measurement, VolumetricMeasureme
 
     if (source == VolumetricMeasurementSource::BLUETOOTH) {
         lastBluetoothMeasurement.store(millis());
+        currentScaleMass.store(static_cast<float>(measurement));
     } else if (source == VolumetricMeasurementSource::HARDWARE) {
         lastHardwareMeasurement.store(millis());
+        currentScaleMass.store(static_cast<float>(measurement));
     }
 
     double effectiveMeasurement = measurement;
@@ -1546,6 +1619,14 @@ bool Controller::isHardwareScaleHealthy() const {
     }
     const unsigned long lastMeasurement = lastHardwareMeasurement.load();
     return lastMeasurement != 0 && millis() - lastMeasurement < HARDWARE_GRACE_PERIOD_MS;
+}
+
+bool Controller::isScaleConnected() const {
+#ifndef GAGGIMATE_SIM
+    return isBluetoothScaleHealthy() || BLEScales.isConnected() || isHardwareScaleHealthy();
+#else
+    return isBluetoothScaleHealthy() || isHardwareScaleHealthy();
+#endif
 }
 
 void Controller::onFlush() {

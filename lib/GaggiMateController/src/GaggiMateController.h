@@ -12,6 +12,7 @@
 #include <peripherals/Max31855Thermocouple.h>
 #include <peripherals/PressureSensor.h>
 #include <peripherals/Pump.h>
+#include <peripherals/PhysicsControlCoordinator.h>
 #include <peripherals/SimpleRelay.h>
 #include <peripherals/addons/GearpumpAddon.h>
 #include <vector>
@@ -52,6 +53,7 @@ class GaggiMateController {
     Heater *heater = nullptr;
     Heater *heater2 = nullptr;
     HeaterCoordinator *heaterCoordinator = nullptr;
+    PhysicsControlCoordinator *physicsCoordinator = nullptr;
     Pump *pump = nullptr;
     SimpleRelay *valve = nullptr;
     SimpleRelay *alt = nullptr;

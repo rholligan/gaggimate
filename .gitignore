@@ -20,3 +20,9 @@ sim_data/
 out/
 
 web/store
+
+# Local scratch and agent metadata
+.agents/
+PROJECT.md
+TEST_INFRA.md
+TEST_READY.md
